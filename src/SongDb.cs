@@ -128,13 +128,15 @@ public sealed class Settings
     public float SfxVol { get; set; } = 0.7f;
     public bool Fullscreen { get; set; }
     public string PlayerName { get; set; } = "Jogador";
+    public string Highway { get; set; }             // "game/name" of an original highway from a disc; null = Riffstorm
     public int[] KeyBinds { get; set; }             // keyboard key per Act (see Binds.cs)
     public string[] PadBinds { get; set; }          // controller input per Act
     public int LastDifficulty { get; set; } = 1;
     public Dictionary<string, int> Best { get; set; } = new();
     public Dictionary<string, int> BestStars { get; set; } = new();
 
-    static string Dir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Riffstorm");
+    // RIFFSTORM_SAVE_DIR: separate settings for automated tests (never touches the player's own save)
+    static string Dir => Environment.GetEnvironmentVariable("RIFFSTORM_SAVE_DIR") is string d && d.Length > 0 ? d : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Riffstorm");
     static string FilePath => Path.Combine(Dir, "save.json");
 
     public static Settings Load()

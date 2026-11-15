@@ -1,4 +1,4 @@
-"""
+﻿"""
 Builds assets/covers.json: song key ("gh1/ironman") -> MusicBrainz release-group id whose Cover Art Archive front image
 is the cover the game shows. The game downloads the images itself at runtime, so no album art is stored in the repo.
 
@@ -25,7 +25,7 @@ def main():
     lib = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.environ["LOCALAPPDATA"], "Riffstorm", "biblioteca")
     covers = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "..", "..", "assets", "covers")
     out_path = os.path.join(HERE, "..", "..", "assets", "covers.json")
-    result = json.load(open(out_path, encoding="utf-8")) if os.path.exists(out_path) else {}
+    result = json.load(open(out_path, encoding="utf-8-sig")) if os.path.exists(out_path) else {}
     unmatched = []
     for sj in sorted(glob.glob(os.path.join(lib, "*", "*", "song.json"))):
         s = json.load(open(sj, encoding="utf-8"))

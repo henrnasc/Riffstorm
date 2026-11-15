@@ -55,7 +55,29 @@ ALBUMS = {
         "numberofthebeast": ("Iron Maiden", "The Number of the Beast"),
     },
 }
-TITLE_FIX = {"You Got Another Thing Comin'": "You've Got Another Thing Comin'"}
+ALBUMS["gha"] = {
+    "alltheyoungdudes": ("Mott the Hoople", "All the Young Dudes"), "alwaysontherun": ("Lenny Kravitz", "Mama Said"),
+    "completecontrol": ("The Clash", "The Clash"), "drawtheline": ("Aerosmith", "Draw the Line"), "dreamon": ("Aerosmith", "Aerosmith"),
+    "dreampolice": ("Cheap Trick", "Dream Police"), "ihatemyselfforlovingyou": ("Joan Jett and the Blackhearts", "Up Your Alley"),
+    "kingofrock": ("Run-D.M.C.", "King of Rock"), "livinontheedge": ("Aerosmith", "Get a Grip"), "loveinanelevator": ("Aerosmith", "Pump"),
+    "mamakin": ("Aerosmith", "Aerosmith"), "ragdoll": ("Aerosmith", "Permanent Vacation"), "sweetemotion": ("Aerosmith", "Toys in the Attic"),
+    "trainkeptarollin": ("Aerosmith", "Get Your Wings"), "walkthiswayrundmc": ("Run-D.M.C.", "Raising Hell"),
+}
+ALBUMS["ghm"] = {
+    "aceofspades": ("Motörhead", "Ace of Spades"), "amievil": ("Diamond Head", "Lightning to the Nations"),
+    "battery": ("Metallica", "Master of Puppets"), "creepingdeath": ("Metallica", "Ride the Lightning"),
+    "dyerseve": ("Metallica", "...And Justice for All"), "entersandman": ("Metallica", "Metallica"),
+    "fadetoblack": ("Metallica", "Ride the Lightning"), "forwhomthebelltolls": ("Metallica", "Ride the Lightning"),
+    "frantic": ("Metallica", "St. Anger"), "fuel": ("Metallica", "Reload"), "hellbentforleather": ("Judas Priest", "Hell Bent for Leather"),
+    "hitthelights": ("Metallica", "Kill 'Em All"), "masterofpuppets": ("Metallica", "Master of Puppets"),
+    "noleafclover": ("Metallica", "S&M"), "nothingelsematters": ("Metallica", "Metallica"), "one": ("Metallica", "...And Justice for All"),
+    "orion": ("Metallica", "Master of Puppets"), "seekanddestroy": ("Metallica", "Kill 'Em All"),
+    "stackedactors": ("Foo Fighters", "There Is Nothing Left to Lose"), "thememoryremains": ("Metallica", "Reload"),
+    "theunforgiven": ("Metallica", "Metallica"), "warensemble": ("Slayer", "Show No Mercy"), "whiplash": ("Metallica", "Kill 'Em All"),
+    "disposeableheroes": ("Metallica", "Master of Puppets"), "mommyslittlemonster": ("Social Distortion", "Mommy's Little Monster"),
+    "turnthepage": ("Metallica", "Garage Inc."), "sadbuttrue": ("Metallica", "Metallica"), "whereverimayroam": ("Metallica", "Metallica"),
+}
+TITLE_FIX ={"You Got Another Thing Comin'": "You've Got Another Thing Comin'"}
 ARTIST_FIX = {"The Ramones": "Ramones", "Sum41": "Sum 41"}
 BLOCK = ("guitar hero",)
 

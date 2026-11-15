@@ -37,6 +37,7 @@ public static partial class Game
         else if (_shotScreen is "discs" or "Discs") Go(Screen.Discs);
         else if (_shotScreen is "controls" or "Controls") Go(Screen.Controls);
         else if (_shotScreen is "online" or "Online") Go(Screen.Online);
+        else if (_shotScreen is "highwaypick" or "HighwayPick") Go(Screen.HighwayPick);
         else Go(Screen.Title);
     }
 
@@ -384,6 +385,7 @@ public static partial class Game
         var items = new List<(string label, string value, Action<int> change, Action enter)>
         {
             ("Controles (mudar botões)", ">>", null, () => { _cRow = 0; _cCol = 0; _capAct = -1; Go(Screen.Controls); }),
+            ("Pista", HighwayLabel(), null, () => { _hwTab = -1; Go(Screen.HighwayPick); }),
             ("Tipo de controle", Cfg.Controller == 0 ? "Controle (estilo PS2)" : "Guitarra", d => { Cfg.Controller = 1 - Cfg.Controller; Cfg.PadBinds = Binds.DefaultPad(Cfg.Controller); }, null),
             ("Discos (pasta ISOs)", ">>", null, () => Go(Screen.Discs)),
             ("Palhetada", Cfg.AutoStrum ? "Automática" : "Obrigatória (PS2)", d => Cfg.AutoStrum = !Cfg.AutoStrum, null),

@@ -1,4 +1,5 @@
-using System.Text;
+﻿using System.Text;
+using System.Text.Json;
 
 namespace Riffstorm;
 
@@ -9,6 +10,17 @@ public static class Program
     {
         if (args.Length > 0 && args[0] == "--selftest") return SelfTest(args.Length > 1 ? args[1] : null);
         if (args.Length > 1 && args[0] == "--import") return ImportCli(args[1], args.Length > 2 ? args[2] : null);
+        if (args.Length > 1 && args[0] == "--stemcheck") return StemCheck(args[1]);
+        if (args.Length > 1 && args[0] == "--highways")
+        {
+            // Riffstorm.exe --highways <iso>: extract only the original highways of an already imported disc
+            var cfg = Settings.Load(); var lib = cfg.LibraryPath ?? SongDb.DefaultRoot;
+            string sha; using (var fs = File.OpenRead(args[1])) sha = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(fs)).ToLowerInvariant();
+            var kg = Importer.BySha1(sha);
+            int n = kg == null ? -1 : Highways.Extract(args[1], lib, kg);
+            File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "highways.log"), $"{kg?.Id ?? "?"}: {n}\n");
+            return n >= 0 ? 0 : 1;
+        }
         try
         {
             Game.Run(args);
@@ -38,6 +50,39 @@ public static class Program
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "import.log"), msg);
         if (pr.Error == null) { cfg.LibraryPath = Path.GetFullPath(lib); cfg.Save(); }
         return pr.Error == null ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Which audio stem follows the guitar chart? For each stem: loudness while the (expert) guitar part plays notes
+    /// vs. while it rests for 2+ seconds. The guitar stem has the highest ratio. Writes stemcheck.txt.
+    /// </summary>
+    static int StemCheck(string songDir)
+    {
+        var s = JsonSerializer.Deserialize<Song>(File.ReadAllText(Path.Combine(songDir, "song.json")), SongDb.Json);
+        s.Dir = songDir;
+        var chart = Chart.Parse(File.ReadAllBytes(s.ChartPath));
+        var notes = chart.Notes[3].Count > 0 ? chart.Notes[3] : chart.Notes[1];
+        var sb = new StringBuilder($"{s.Name}\n");
+        foreach (var stem in s.Stems)
+        {
+            var pcm = SongAudio.Mp3(Path.Combine(songDir, stem));
+            double on = 0, off = 0; int non = 0, noff = 0;
+            int win = Audio.Rate / 10;
+            for (int w = 0; w + win < pcm[0].Length; w += win)
+            {
+                double t = w / (double)Audio.Rate, e = 0;
+                for (int i = w; i < w + win; i += 4) e += (double)pcm[0][i] * pcm[0][i];
+                e = Math.Sqrt(e / (win / 4));
+                int idx = notes.FindIndex(n => n.EndTime + 0.15 >= t);
+                bool playing = idx >= 0 && notes[idx].Time - 0.15 <= t;
+                bool resting = idx < 0 ? t > (notes.Count > 0 ? notes[^1].EndTime + 2 : 0) : notes[idx].Time - t > 2 && (idx == 0 || t - notes[idx - 1].EndTime > 1);
+                if (playing) { on += e; non++; } else if (resting) { off += e; noff++; }
+            }
+            double a = non > 0 ? on / non : 0, b = noff > 0 ? off / noff : 0;
+            sb.AppendLine($"{stem,-14} tocando {a,7:0}  pausa {b,7:0}  razão {(b > 1 ? a / b : 0),6:0.00}");
+        }
+        File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "stemcheck.txt"), sb.ToString());
+        return 0;
     }
 
     static int SelfTest(string lib)

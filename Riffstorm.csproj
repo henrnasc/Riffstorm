@@ -6,7 +6,7 @@
     <Nullable>disable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>Riffstorm</AssemblyName>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <RootNamespace>Riffstorm</RootNamespace>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>

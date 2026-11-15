@@ -4,7 +4,7 @@ using Raylib_cs;
 
 namespace Riffstorm;
 
-public enum Screen { Boot, Discs, Title, Setlist, Loading, Play, Results, Settings, Calibrate, Online, Lobby, OnlineResults, Controls }
+public enum Screen { Boot, Discs, Title, Setlist, Loading, Play, Results, Settings, Calibrate, Online, Lobby, OnlineResults, Controls, HighwayPick }
 
 public static partial class Game
 {
@@ -87,6 +87,7 @@ public static partial class Game
                 case Screen.Lobby: LobbyScreen(); break;
                 case Screen.OnlineResults: OnlineResultsScreen(); break;
                 case Screen.Controls: ControlsScreen(); break;
+                case Screen.HighwayPick: HighwayPickScreen(); break;
             }
             DrawBusyNote();
             DrawFade(dt);
@@ -269,7 +270,7 @@ public static partial class Game
     /// <summary>Short tab label for a game.</summary>
     static string TabName(GameEntry g) => g.Id switch
     {
-        "gh1" => "GH 1", "gh2" => "GH 2", "gh80s" => "ROCKS THE 80s", "gh3" => "GH 3",
+        "gh1" => "GH 1", "gh2" => "GH 2", "gh80s" => "ROCKS THE 80s", "gh3" => "GH 3", "gha" => "AEROSMITH", "ghm" => "METALLICA",
         _ => g.Name.ToUpperInvariant(),
     };
 
@@ -350,6 +351,7 @@ public static partial class Game
     {
         _pcm = pcm; _chart = chart;
         _player = new Player(chart, _playDiff);
+        Highway.Surface = Highways.Current(Cfg);
         _hw = new Highway { Speed = 7.5f * Cfg.NoteSpeed * (_playDiff >= 2 ? 1.15f : 1f), Lefty = Cfg.Lefty };
         _paused = _ended = _failedShown = false; _pauseSel = 0;
         _lastStreakCall = 0; _announceAt = -10;

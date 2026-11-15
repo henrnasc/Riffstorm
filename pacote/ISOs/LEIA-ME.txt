@@ -1,4 +1,4 @@
-COLOQUE AQUI AS ISOs DOS SEUS DISCOS
+﻿COLOQUE AQUI AS ISOs DOS SEUS DISCOS
 ====================================
 
 Pode ser direto nesta pasta ou em subpastas (uma por disco). Com o jogo aberto ou fechado:
@@ -17,6 +17,12 @@ O jogo só aceita estas versões exatas (conferidas pela impressão digital SHA-
 
   Guitar Hero III - Legends of Rock (USA).iso        PS3   6.318.391.296 bytes
     SHA-1 a1fe34e1895aab21e7da0dca62bb49edd1f6dffa
+
+  Guitar Hero - Aerosmith (USA) (En,Fr).iso           PS3   5.355.208.704 bytes
+    SHA-1 2447d9030da1c3f46c2dffd461704e1362bda1ce
+
+  Guitar Hero - Metallica (USA) (En,Fr).iso           PS3   8.447.066.112 bytes
+    SHA-1 015000e535f816d7be73d954a45fa99a1a95b2e1
 
 O nome do arquivo não importa, só o conteúdo. Depois de importado, a ISO pode ser apagada:
 as músicas ficam em %LOCALAPPDATA%\Riffstorm\biblioteca.

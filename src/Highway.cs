@@ -85,6 +85,16 @@ public static class HwAssets
         return p;
     }
 
+    public static Mesh SurfaceBoard; static float _surfaceRepeat = -1;
+
+    /// <summary>Board mesh whose texture repeats <paramref name="repeat"/> times along its length.</summary>
+    public static void EnsureSurfaceMesh(float repeat)
+    {
+        if (MathF.Abs(repeat - _surfaceRepeat) < 0.001f) return;
+        _surfaceRepeat = repeat;
+        SurfaceBoard = new MeshBuilder().PlaneXZ(1, 1, 1, repeat).Build();
+    }
+
     public static void Init()
     {
         if (_done) return; _done = true;
@@ -182,6 +192,8 @@ public sealed partial class Highway
     public bool EnergyFilling;
     /// <summary>Another player's highway (online): ignores the local frets and skips the bloom pass.</summary>
     public bool Ghost;
+    /// <summary>Original highway surface from a disc (null = Riffstorm's own board).</summary>
+    public static Texture2D? Surface;
     float _whSmooth;
     Camera3D _cam;
 
@@ -280,8 +292,19 @@ public sealed partial class Highway
     {
         R3.SetFade(-Far + 5f, -Far + 0.5f);
         float len = Far + 1.5f;
-        R3.SetUv(new Vector2(0, (float)((t * Speed) / 4f % 1.0)));
-        R3.Draw(HwAssets.Board, R3.M(R3.S(BoardHalf * 2, 1, len), R3.T(0, -0.005f, 1.5f)), star ? new Color(170, 200, 255, 255) : Color.White, 0.35f, 18, 0, 0.0f, HwAssets.BoardTex);
+        if (Surface is Texture2D surf)
+        {
+            // an original highway from a disc: 1:2 images, each tile as long as twice the board width
+            float tile = BoardHalf * 2 * 2;
+            HwAssets.EnsureSurfaceMesh(len / tile);
+            R3.SetUv(new Vector2(0, (float)((t * Speed) / tile % 1.0)));
+            R3.Draw(HwAssets.SurfaceBoard, R3.M(R3.S(BoardHalf * 2, 1, len), R3.T(0, -0.005f, 1.5f)), star ? new Color(170, 200, 255, 255) : Color.White, 0.2f, 18, 0, 0.0f, surf);
+        }
+        else
+        {
+            R3.SetUv(new Vector2(0, (float)((t * Speed) / 4f % 1.0)));
+            R3.Draw(HwAssets.Board, R3.M(R3.S(BoardHalf * 2, 1, len), R3.T(0, -0.005f, 1.5f)), star ? new Color(170, 200, 255, 255) : Color.White, 0.35f, 18, 0, 0.0f, HwAssets.BoardTex);
+        }
         R3.SetUv(Vector2.Zero);
         var line = new Color(235, 235, 240, 150);
         // thin lane dividers (between lanes) + crisp edges

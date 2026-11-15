@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -23,6 +23,8 @@ public static class Importer
         new("gh2", "Guitar Hero II", "PS2", "SLUS_214.47", 4646305792, "e1a3a81827aa4264984b4f3678de58ca3d881528", true),
         new("gh80s", "Guitar Hero Encore: Rocks the 80s", "PS2", "SLUS_215.86", 1901821952, "184f2dc9993d9b1e6edf0125f68e1ce07742567a", true),
         new("gh3", "Guitar Hero III: Legends of Rock", "PS3", null, 6318391296, "a1fe34e1895aab21e7da0dca62bb49edd1f6dffa", true),
+        new("gha", "Guitar Hero: Aerosmith", "PS3", null, 5355208704, "2447d9030da1c3f46c2dffd461704e1362bda1ce", true),
+        new("ghm", "Guitar Hero: Metallica", "PS3", null, 8447066112, "015000e535f816d7be73d954a45fa99a1a95b2e1", true),
     };
 
     public static KnownGame BySha1(string sha1) => Known.FirstOrDefault(k => k.Sha1 == sha1);
@@ -58,8 +60,12 @@ public static class Importer
                 case "gh1": ImportHarmonixArk(discPath, libraryRoot, kg, pr, TierNames, false); break;
                 case "gh2":
                 case "gh80s": ImportHarmonixArk(discPath, libraryRoot, kg, pr, TierNames, true); break;
-                case "gh3": NeversoftImport.Import(discPath, libraryRoot, kg, pr); break;
+                case "gh3":
+                case "gha":
+                case "ghm": NeversoftImport.Import(discPath, libraryRoot, kg, pr); break;
             }
+            pr.Current = "Pistas originais";
+            try { Highways.Extract(discPath, libraryRoot, kg); } catch { /* highways are optional */ }
         }
         catch (Exception e) { pr.Error = e.Message; }
         finally { pr.Finished = true; }

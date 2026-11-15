@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 
@@ -173,7 +173,9 @@ public static class Qb
         while (q != 0 && guard++ < 4000)
         {
             uint typ = U(d, b + q), key = U(d, b + q + 4), v = U(d, b + q + 8), nxt = U(d, b + q + 12);
-            res[key] = Value(d, b, (int)((typ >> 16) & 0x7F), v);
+            // GH3: 0x80|kind in the second byte; GH World Tour engine (Metallica): kind in the third byte (0x0001KK00)
+            int kind = ((typ >> 16) & 0x80) != 0 ? (int)((typ >> 16) & 0x7F) : (int)((typ >> 8) & 0xFF);
+            res[key] = Value(d, b, kind, v);
             q = (int)nxt;
         }
         return res;
@@ -188,11 +190,16 @@ public static class NeversoftImport
     static readonly byte[] FsbKey = Encoding.ASCII.GetBytes("5atu6w4zaw");
     static readonly byte[] Rev = Enumerable.Range(0, 256).Select(i => { int r = 0; for (int b = 0; b < 8; b++) if ((i & (1 << b)) != 0) r |= 1 << (7 - b); return (byte)r; }).ToArray();
 
+    /// <summary>
+    /// GH3, GH: Aerosmith (same engine) and GH: Metallica (World Tour engine). Song list + career from QB.PAK/PAB,
+    /// titles from the QS string tables when the list stores keys (Metallica), audio from encrypted FSBs, charts from song PAKs.
+    /// </summary>
     public static void Import(string isoPath, string libraryRoot, Importer.KnownGame kg, Importer.Progress pr)
     {
         using var iso = new IsoFs(isoPath);
-        const string Data = "PS3_GAME/USRDIR/DATA/";
-        var qbAll = iso.Read(Data + "PAK/QB.PAK.PS3").Concat(iso.Read(Data + "PAK/QB.PAB.PS3")).ToArray();
+        var ns = new NsData(iso);
+        bool wt = kg.Id == "ghm";                      // World Tour engine
+        var qbAll = ns.ReadPakPab("PAK/QB.PAK.PS3");
         var ents = Qb.ReadPak(qbAll);
         object FindAny(string name)
         {
@@ -205,32 +212,39 @@ public static class NeversoftImport
             }
             return null;
         }
-        var props = FindAny("permanent_songlist_props") as Dictionary<uint, object> ?? throw new InvalidDataException("Lista de músicas do GH3 não encontrada.");
-        var career = FindAny("gh3_career_songs") as Dictionary<uint, object>;
-        var songlist = FindAny("gh3_songlist") as List<object>;
+        var strings = wt && ns.Exists("PAK/QS.PAK.PS3") ? NsData.Strings(ns.Read("PAK/QS.PAK.PS3")) : new Dictionary<uint, string>();
+        string Text(object v, string fallback) => v switch
+        {
+            string s => s,
+            Qb.Key k when strings.TryGetValue(k.V, out var s2) => s2,
+            _ => fallback,
+        };
+
+        var props = FindAny("permanent_songlist_props") as Dictionary<uint, object> ?? throw new InvalidDataException("Lista de músicas não encontrada.");
+        var career = (FindAny(wt ? "gh4_career_guitar_songs" : "gh3_career_songs") ?? FindAny("gh3_career_songs")) as Dictionary<uint, object>;
+        var songlist = (FindAny(wt ? "gh_songlist" : "gh3_songlist") ?? FindAny("gh_songlist")) as List<object>;
 
         // song metadata by QB key of its name
         var meta = new Dictionary<uint, (string id, string title, string artist)>();
         foreach (var v in props.Values)
             if (v is Dictionary<uint, object> st && st.TryGetValue(Qb.K("name"), out var nm) && nm is string id)
-                meta[Qb.K(id)] = (id, st.GetValueOrDefault(Qb.K("title")) as string ?? id, st.GetValueOrDefault(Qb.K("artist")) as string ?? "");
+                meta[Qb.K(id)] = (id, Text(st.GetValueOrDefault(Qb.K("title")), id), Text(st.GetValueOrDefault(Qb.K("artist")), ""));
 
         var game = new GameEntry { Id = kg.Id, Name = kg.Name, Serial = kg.Serial, SourceSha1 = kg.Sha1, Imported = DateTime.Now.ToString("yyyy-MM-dd HH:mm") };
-        var inCareer = new HashSet<uint>();
         if (career != null)
             for (int t = 1; t <= 12; t++)
             {
                 if (career.GetValueOrDefault(Qb.K($"tier{t}")) is not Dictionary<uint, object> tier) continue;
-                var te = new TierEntry { Name = tier.GetValueOrDefault(Qb.K("title")) as string ?? $"Nível {t}" };
+                var te = new TierEntry { Name = Text(tier.GetValueOrDefault(Qb.K("title")), $"Nível {t}") };
                 if (te.Name.Length > 3 && char.IsDigit(te.Name[0]) && te.Name[1] == '.') te.Name = te.Name[2..].Trim();
                 if (tier.GetValueOrDefault(Qb.K("songs")) is List<object> songs)
                     foreach (var s in songs)
-                        if (s is Qb.Key k && meta.TryGetValue(k.V, out var m)) { te.Songs.Add(m.id.ToLowerInvariant()); inCareer.Add(k.V); }
+                        if (s is Qb.Key k && meta.TryGetValue(k.V, out var m)) te.Songs.Add(m.id.ToLowerInvariant());
                 game.Tiers.Add(te);
             }
         // the song list also carries internal sync tests and tutorial lessons – not songs
         var all = (songlist?.OfType<Qb.Key>().Select(k => k.V) ?? meta.Keys).Where(meta.ContainsKey).Distinct()
-            .Where(k => !meta[k].id.StartsWith("tutorial", StringComparison.OrdinalIgnoreCase) && !meta[k].id.StartsWith("synctest", StringComparison.OrdinalIgnoreCase))
+            .Where(k => !IsInternal(meta[k].id))
             .ToList();
 
         var gdir = Path.Combine(libraryRoot, kg.Id);
@@ -240,25 +254,40 @@ public static class NeversoftImport
         foreach (var key in all)
         {
             var (id, title, artist) = meta[key];
+            // a few entries kept the disc's own placeholder text
+            if (TitleFixes.TryGetValue(kg.Id + "/" + id.ToLowerInvariant(), out var fix)) (title, artist) = fix;
             pr.Current = title;
             string up = id.ToUpperInvariant();
             try
             {
-                if (!iso.Exists(Data + $"MUSIC/{up}.FSB.PS3") || !iso.Exists(Data + $"SONGS/{up}_SONG.PAK.PS3")) { pr.Done++; continue; }
+                string pakRel = $"SONGS/{up}_SONG.PAK.PS3";
+                bool hasAudio = wt ? ns.Exists($"MUSIC/{up}_1.FSB.PS3") : ns.Exists($"MUSIC/{up}.FSB.PS3");
+                if (!hasAudio || !ns.Exists(pakRel)) { pr.Done++; continue; }
                 var sid = id.ToLowerInvariant();
                 var sdir = Path.Combine(gdir, sid);
                 Directory.CreateDirectory(sdir);
-                var stems = SplitFsb(iso.Read(Data + $"MUSIC/{up}.FSB.PS3"), sdir);
-                var pak = iso.Read(Data + $"SONGS/{up}_SONG.PAK.PS3");
+                var pak = ns.Read(pakRel);
                 var (mid, lastMs) = ChartToMidi(pak, sid);
                 Chart.Parse(mid);
                 File.WriteAllBytes(Path.Combine(sdir, "notes.mid"), mid);
-                var order = new[] { "song", "rhythm", "guitar" }.Where(stems.Contains).ToList();
+
+                List<string> order; bool preview;
+                if (wt)
+                {
+                    order = SplitWtAudio(ns, up, sdir);
+                    preview = File.Exists(Path.Combine(sdir, "preview.mp3"));
+                }
+                else
+                {
+                    var stems = SplitFsb(ns.Read($"MUSIC/{up}.FSB.PS3"), sdir);
+                    order = new[] { "song", "rhythm", "guitar" }.Where(stems.Contains).ToList();
+                    preview = stems.Contains("preview");
+                }
                 var s = new Song
                 {
                     Id = sid, Game = kg.Id, Name = title, Artist = artist, Chart = "notes.mid", Audio = null,
                     Stems = order.Select(x => x + ".mp3").ToArray(),
-                    Preview = stems.Contains("preview") ? "preview.mp3" : null,
+                    Preview = preview ? "preview.mp3" : null,
                     Pans = order.SelectMany(_ => new[] { -1f, 1f }).ToArray(),
                     Vols = order.SelectMany(_ => new[] { 0.9f, 0.9f }).ToArray(),
                     Guitar = order.SelectMany(x => new[] { x == "guitar", x == "guitar" }).ToArray(),
@@ -269,7 +298,12 @@ public static class NeversoftImport
                 imported.Add(sid);
                 pr.Imported++;
             }
-            catch (Exception) { /* skip a broken song, keep importing the rest */ }
+            catch (Exception ex)
+            {
+                // skip a broken song, keep importing the rest (and leave no half-written folder behind)
+                try { File.AppendAllText(Path.Combine(gdir, "import_errors.txt"), $"{id}: {ex.GetType().Name}: {ex.Message}\n"); } catch { }
+                try { var sd = Path.Combine(gdir, id.ToLowerInvariant()); if (Directory.Exists(sd) && !File.Exists(Path.Combine(sd, "song.json"))) Directory.Delete(sd, true); } catch { }
+            }
             pr.Done++;
         }
         foreach (var t in game.Tiers) t.Songs.RemoveAll(x => !imported.Contains(x));
@@ -277,6 +311,130 @@ public static class NeversoftImport
         var careerIds = game.Tiers.SelectMany(t => t.Songs).ToHashSet();
         game.Bonus = imported.Where(x => !careerIds.Contains(x)).OrderBy(x => x).ToList();
         File.WriteAllText(Path.Combine(gdir, "game.json"), JsonSerializer.Serialize(game, SongDb.Json));
+    }
+
+    static readonly Dictionary<string, (string, string)> TitleFixes = new()
+    {
+        ["gha/ihatemyselfforlovingyou"] = ("I Hate Myself for Loving You", "Joan Jett and the Blackhearts"),
+    };
+
+    /// <summary>Tutorial lessons, sync/debug tests and credits versions that live in the song lists but aren't songs.</summary>
+    static bool IsInternal(string id)
+    {
+        id = id.ToLowerInvariant();
+        return id.StartsWith("tutorial") || id.StartsWith("tut_") || id.StartsWith("synctest") || id.Contains("test")
+            || id.Contains("debug") || id.EndsWith("credits");
+    }
+
+    static readonly byte[] RevTable = Enumerable.Range(0, 256).Select(i => { int r = 0; for (int b = 0; b < 8; b++) if ((i & (1 << b)) != 0) r |= 1 << (7 - b); return (byte)r; }).ToArray();
+
+    /// <summary>
+    /// World Tour engine audio: &lt;ID&gt;_1/_2/_3/_PREVIEW.FSB.PS3, each FSB4 encrypted with its own 31-byte key
+    /// (out = bitreverse(in ^ key[i % 31])). The key is recovered from the file: the headers are mostly zero bytes, so the
+    /// most frequent encrypted byte at each key position is the key. Each FSB holds several stereo MP3 streams interleaved
+    /// frame by frame: _1 = drums (4), _2 = guitar, bass, vocals, _3 = band backing + extra.
+    /// </summary>
+    static List<string> SplitWtAudio(NsData ns, string up, string dir)
+    {
+        var order = new List<string>();
+        void Part(string suffix, string[] names)
+        {
+            string rel = $"MUSIC/{up}_{suffix}.FSB.PS3";
+            if (!ns.Exists(rel)) return;
+            var d = DecryptWt(ns.Read(rel));
+            if (d == null)
+            {
+                if (suffix == "PREVIEW") return;            // optional: the menu then previews the song itself
+                throw new InvalidDataException("FSB4 inesperado");
+            }
+            int shdr = BitConverter.ToInt32(d, 8);
+            int comp = BitConverter.ToInt32(d, 48 + 36);
+            int ch = BitConverter.ToUInt16(d, 48 + 62);
+            int off = 48 + shdr;
+            var streams = SplitMp3(d.AsSpan(off, Math.Min(comp, d.Length - off)), Math.Max(1, ch / 2));
+            for (int i = 0; i < streams.Count && i < names.Length; i++)
+            {
+                if (names[i] == null) continue;
+                File.WriteAllBytes(Path.Combine(dir, names[i] + ".mp3"), streams[i]);
+                if (names[i] != "preview") order.Add(names[i]);
+            }
+        }
+        Part("1", new[] { "drums1", "drums2", "drums3", "drums4" });
+        Part("2", new[] { "guitar", "rhythm", "vocals" });
+        Part("3", new[] { "song", "song2" });
+        Part("PREVIEW", new[] { "preview" });
+        // guitar last, so it can be muted on a miss like the other games
+        order = order.Where(x => x != "guitar").Append("guitar").Where(x => File.Exists(Path.Combine(dir, x + ".mp3"))).ToList();
+        return order;
+    }
+
+    /// <summary>
+    /// World Tour engine FSB4 encryption: out = bitreverse(in ^ key[i % L]), with a per-file key whose length L varies
+    /// (31 and 22 bytes are both used). Known plaintext gives the key: bytes 0-11 ("FSB4", 1 sample, header 0x50),
+    /// 16-19 (version 0x40000) and the sample name "multichannel sound" + zero padding at 50-79. Every length from 1 to 64
+    /// is tried and the one whose header and MP3 frames check out is used. Null if none does.
+    /// </summary>
+    static byte[] DecryptWt(byte[] raw)
+    {
+        if (raw.Length < 512) return null;
+        var plain = new byte[80]; var known = new bool[80];
+        void Put(int at, ReadOnlySpan<byte> b) { for (int i = 0; i < b.Length; i++) { plain[at + i] = b[i]; known[at + i] = true; } }
+        Put(0, "FSB4"u8); Put(4, BitConverter.GetBytes(1)); Put(8, BitConverter.GetBytes(0x50));
+        Put(16, BitConverter.GetBytes(0x40000));
+        Put(50, "multichannel sound"u8); Put(68, new byte[12]);
+        // the name region first: some files keep data in the header's "zero" bytes
+        var order = Enumerable.Range(50, 30).Concat(Enumerable.Range(0, 50)).Where(p => known[p]).ToArray();
+        var head = new byte[Math.Min(raw.Length, 4096)];
+        for (int len = 1; len <= 64; len++)
+        {
+            var key = new byte[len]; var got = new bool[len]; int have = 0;
+            foreach (int p in order)
+                if (!got[p % len]) { key[p % len] = (byte)(raw[p] ^ RevTable[plain[p]]); got[p % len] = true; have++; }
+            if (have < len) continue;
+            for (int i = 0; i < head.Length; i++) head[i] = RevTable[raw[i] ^ key[i % len]];
+            if (!ValidFsb4(head, raw.Length)) continue;
+            var d = new byte[raw.Length];
+            for (int i = 0; i < raw.Length; i++) d[i] = RevTable[raw[i] ^ key[i % len]];
+            return d;
+        }
+        return null;
+    }
+
+    /// <summary>FSB4 header (first bytes of the file) whose sizes fit the file and whose data starts with two MP3 frames.</summary>
+    static bool ValidFsb4(byte[] d, long fileLen)
+    {
+        if (d.Length < 400 || Encoding.ASCII.GetString(d, 0, 4) != "FSB4") return false;
+        int shdr = BitConverter.ToInt32(d, 8), comp = BitConverter.ToInt32(d, 48 + 36), ch = BitConverter.ToUInt16(d, 48 + 62);
+        if (shdr != 0x50 || comp <= 0 || 48 + shdr + (long)comp > fileLen || ch < 1 || ch > 16) return false;
+        int off = 48 + shdr;
+        if (d[off] != 0xFF || (d[off + 1] & 0xE0) != 0xE0) return false;
+        int[] br = { 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0 };
+        int[] sr = { 44100, 48000, 32000, 0 };
+        int b2 = d[off + 2], bitrate = br[b2 >> 4] * 1000, rate = sr[(b2 >> 2) & 3];
+        if (bitrate == 0 || rate == 0) return false;
+        int next = off + 144 * bitrate / rate + ((b2 >> 1) & 1);
+        return next + 1 < d.Length && d[next] == 0xFF && (d[next + 1] & 0xE0) == 0xE0;
+    }
+
+    /// <summary>Splits N interleaved stereo MP3 streams (frame by frame) into N MP3 files.</summary>
+    static List<byte[]> SplitMp3(ReadOnlySpan<byte> d, int nStreams)
+    {
+        int[] br = { 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0 };
+        int[] sr = { 44100, 48000, 32000, 0 };
+        var outs = Enumerable.Range(0, nStreams).Select(_ => new MemoryStream()).ToList();
+        int p = 0, k = 0;
+        while (p + 4 <= d.Length)
+        {
+            if (d[p] != 0xFF || (d[p + 1] & 0xE0) != 0xE0) { p++; continue; }
+            int b2 = d[p + 2];
+            int bitrate = br[b2 >> 4] * 1000, rate = sr[(b2 >> 2) & 3], pad = (b2 >> 1) & 1;
+            if (bitrate == 0 || rate == 0) { p++; continue; }
+            int size = 144 * bitrate / rate + pad;
+            if (p + size > d.Length) break;
+            outs[k % nStreams].Write(d.Slice(p, size));
+            k++; p += size;
+        }
+        return outs.Select(m => m.ToArray()).ToList();
     }
 
     /// <summary>Decrypts the FSB3 (xor key + bit reverse) and writes each MP3 stream (guitar, rhythm, song, preview).</summary>
@@ -348,10 +506,15 @@ public static class NeversoftImport
             int baseN = 60 + di * 12;
             var raw = Qb.Ints(F($"{id}_song_{diffs[di]}"));
             long prevTick = -100000; int prevMask = -1;
-            for (int i = 0; i + 2 < raw.Count; i += 3)
+            // GH3/Aerosmith: (ms, length, bits) triples, bit 5 = hammer-on flip.
+            // World Tour engine (Metallica): (ms, packed) pairs, packed = bits << 16 | length, bit 6 = hammer-on flip.
+            bool pairs = raw.Count >= 2 && raw.Count % 2 == 0 && raw.Where((v, i) => i % 2 == 1).All(v => (v >> 16) != 0);
+            int step = pairs ? 2 : 3;
+            for (int i = 0; i + step - 1 < raw.Count; i += step)
             {
-                int ms = raw[i], len = raw[i + 1], bits = raw[i + 2];
-                int mask = bits & 31; bool flip = (bits & 32) != 0;
+                int ms = raw[i], len, mask; bool flip;
+                if (pairs) { int hi = (int)((uint)raw[i + 1] >> 16); len = raw[i + 1] & 0xFFFF; mask = hi & 31; flip = (hi & 0x40) != 0; }
+                else { len = raw[i + 1]; int bits = raw[i + 2]; mask = bits & 31; flip = (bits & 32) != 0; }
                 if (mask == 0) continue;
                 long on = (long)Math.Round(Tick(ms));
                 long lenT = (long)Math.Round(Tick(ms + len)) - on;

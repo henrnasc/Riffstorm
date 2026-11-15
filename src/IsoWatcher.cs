@@ -114,7 +114,17 @@ public static class IsoWatcher
             e.Game = kg;
             if (!kg.Supported) { e.State = State.NotYetSupported; e.Detail = "Compatível – a importação deste jogo ainda vai ser feita."; continue; }
             var root = _cfg.LibraryPath ?? SongDb.DefaultRoot;
-            if (Importer.IsImported(root, kg)) { e.State = State.Imported; e.Detail = "Na biblioteca"; continue; }
+            if (Importer.IsImported(root, kg))
+            {
+                // songs imported by an older version: still pull the original highways from the disc
+                if (!Highways.Has(root, kg.Id))
+                {
+                    Busy = $"Extraindo as pistas de {kg.Name}...";
+                    try { if (Highways.Extract(f, root, kg) > 0) _libraryChanged = true; } catch { }
+                    Busy = null;
+                }
+                e.State = State.Imported; e.Detail = "Na biblioteca"; continue;
+            }
 
             e.State = State.Importing; e.Detail = "Importando...";
             var pr = new Importer.Progress();

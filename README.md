@@ -31,14 +31,19 @@ Jogo de ritmo de guitarra **nativo para Windows** (sem emulador), com controle, 
        ├── Guitar Hero (USA).iso
        ├── Guitar Hero II (USA).iso
        ├── Guitar Hero Encore - Rocks the 80s (USA).iso
-       └── Guitar Hero III - Legends of Rock (USA).iso
+       ├── Guitar Hero III - Legends of Rock (USA).iso
+       ├── Guitar Hero - Aerosmith (USA) (En,Fr).iso
+       └── Guitar Hero - Metallica (USA) (En,Fr).iso
    ```
    Pode ser direto na pasta ou em subpastas (uma por disco). Não precisa ter todas: cada disco libera as músicas dele.
 3. **Abra o `Riffstorm.exe`.** O jogo confere cada ISO e importa as músicas sozinho, em segundo plano (dá para jogar
    enquanto isso; acompanhe em *Configurações > Discos*). Depois de importada, a ISO pode ser apagada: as músicas
    ficam em `%LOCALAPPDATA%\Riffstorm\biblioteca`.
-4. As **capas dos álbuns** são baixadas automaticamente (Cover Art Archive) na primeira vez que aparecem.
-5. **Atualizações:** na tela inicial, o botão no canto inferior esquerdo verifica se tem versão nova. Se tiver, é só clicar
+4. **Pistas originais:** ao importar um disco, o jogo também lê as pistas (o fundo da trilha) dele. Escolha qual usar em
+   *Configurações > Pista* (uma aba por jogo). Os discos do GH1, GH2, Rocks the 80s, GH3 e Metallica têm pistas; as do
+   Aerosmith ainda não são lidas.
+5. As **capas dos álbuns** são baixadas automaticamente (Cover Art Archive) na primeira vez que aparecem.
+6. **Atualizações:** na tela inicial, o botão no canto inferior esquerdo verifica se tem versão nova. Se tiver, é só clicar
    nele (ou apertar F5 / Select): o jogo baixa, instala e reabre sozinho. Suas músicas, recordes e configurações continuam.
 
 ### ISOs compatíveis
@@ -53,6 +58,8 @@ notas, o que é obrigatório para o multiplayer.
 | Guitar Hero II | `Guitar Hero II (USA).iso` | PS2 · SLUS-21447 | 4.646.305.792 | `e1a3a81827aa4264984b4f3678de58ca3d881528` | 63 |
 | Guitar Hero Encore: Rocks the 80s | `Guitar Hero Encore - Rocks the 80s (USA).iso` | PS2 · SLUS-21586 | 1.901.821.952 | `184f2dc9993d9b1e6edf0125f68e1ce07742567a` | 30 |
 | Guitar Hero III: Legends of Rock | `Guitar Hero III - Legends of Rock (USA).iso` | **PS3** | 6.318.391.296 | `a1fe34e1895aab21e7da0dca62bb49edd1f6dffa` | 73 |
+| Guitar Hero: Aerosmith | `Guitar Hero - Aerosmith (USA) (En,Fr).iso` | **PS3** | 5.355.208.704 | `2447d9030da1c3f46c2dffd461704e1362bda1ce` | 42 |
+| Guitar Hero: Metallica | `Guitar Hero - Metallica (USA) (En,Fr).iso` | **PS3** | 8.447.066.112 | `015000e535f816d7be73d954a45fa99a1a95b2e1` | 48 |
 
 Para conferir a sua ISO antes (PowerShell): `Get-FileHash "arquivo.iso" -Algorithm SHA1`.
 Se a ISO não for compatível, o jogo avisa em *Configurações > Discos* e não importa nada.
