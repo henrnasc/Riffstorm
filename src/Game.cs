@@ -4,7 +4,7 @@ using Raylib_cs;
 
 namespace Riffstorm;
 
-public enum Screen { Boot, Discs, Title, Setlist, Loading, Play, Results, Settings, Calibrate, Online, Lobby, OnlineResults }
+public enum Screen { Boot, Discs, Title, Setlist, Loading, Play, Results, Settings, Calibrate, Online, Lobby, OnlineResults, Controls }
 
 public static partial class Game
 {
@@ -20,6 +20,7 @@ public static partial class Game
     public static void Run(string[] args)
     {
         Cfg = Settings.Load();
+        Updater.CleanupOld();
         for (int i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -37,6 +38,7 @@ public static partial class Game
                 case "--autostart": _autoStart = int.Parse(args[++i]); break;
                 case "--autoready": _autoReady = true; break;
                 case "--no-iso": _noIso = true; break;
+                case "--autoupdate": _autoUpdate = true; break;
                 case "--loopback": NetServer.LoopbackOnly = true; break;
                 case "--shot": _shotScreen = args[++i]; _shotAt = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); _shotFile = args[++i]; break;
             }
@@ -83,6 +85,7 @@ public static partial class Game
                 case Screen.Online: OnlineMenuScreen(); break;
                 case Screen.Lobby: LobbyScreen(); break;
                 case Screen.OnlineResults: OnlineResultsScreen(); break;
+                case Screen.Controls: ControlsScreen(); break;
             }
             DrawBusyNote();
             DrawFade(dt);
@@ -143,6 +146,7 @@ public static partial class Game
             Raylib.DrawRectangleRounded(r, 0.5f, 8, new Color(20, 14, 10, 150));
             Raylib.DrawTextEx(Gfx.Hand, np, new Vector2(r.X + 12 * Gfx.S, r.Y + 4 * Gfx.S), 18 * Gfx.S, 0, new Color(245, 230, 200, 235));
         }
+        UpdateButton();
         switch (choice)
         {
             case 0: Go(Screen.Setlist); _previewFor = null; _pickMode = false; _rows = null; break;
@@ -150,6 +154,57 @@ public static partial class Game
             case 3: Go(Screen.Settings); _setSel = 0; break;
             case 4: _quit = true; break;
         }
+    }
+
+    // ================================================================= update button (title, bottom-left)
+    static bool _updateChecked, _autoUpdate;
+
+    static void UpdateButton()
+    {
+        if (!_updateChecked) { _updateChecked = true; Updater.CheckAsync(); }
+        var st = Updater.State;
+        if (st == Updater.St.Ready) { Updater.Restart(); _quit = true; return; }
+        string ver = "v" + Updater.CurrentText;
+        string txt = st switch
+        {
+            Updater.St.Checking => "Procurando atualizações...",
+            Updater.St.UpToDate => $"Você tem a versão mais nova ({ver})",
+            Updater.St.Available => $"Nova versão {Updater.Latest}! Clique para atualizar",
+            Updater.St.Downloading => $"Baixando atualização... {(int)(Updater.Progress * 100)}%",
+            Updater.St.Installing => "Instalando...",
+            Updater.St.Error => Updater.Error ?? "Erro",
+            _ => $"Verificar atualizações ({ver})",
+        };
+        float s = Gfx.S;
+        var m = Raylib.MeasureTextEx(Gfx.Hand, txt, 19 * s, 0);
+        var r = new Rectangle(22 * s, Gfx.H - 70 * s, Math.Min(Gfx.W * 0.5f, m.X + 64 * s), 42 * s);
+        var mouse = Raylib.GetMousePosition();
+        bool hover = Raylib.CheckCollisionPointRec(mouse, r);
+        bool avail = st == Updater.St.Available;
+        float pulse = avail ? 0.5f + 0.5f * MathF.Sin((float)_screenT * 5) : 0;
+        Raylib.DrawRectangleRounded(new Rectangle(r.X + 3 * s, r.Y + 4 * s, r.Width, r.Height), 0.5f, 10, new Color(0, 0, 0, 90));
+        Raylib.DrawRectangleRounded(r, 0.5f, 10, avail ? Gfx.Lerp(new Color(250, 236, 200, 245), new Color(255, 215, 140, 255), pulse) : hover ? new Color(250, 244, 228, 245) : new Color(235, 228, 215, 230));
+        Raylib.DrawRectangleRoundedLinesEx(r, 0.5f, 10, (avail ? 3 : 2) * s, avail ? Paper.Red : new Color(90, 85, 80, 255));
+        // circular-arrows icon
+        var ic = new Vector2(r.X + 22 * s, r.Y + r.Height / 2);
+        float spin = st is Updater.St.Checking or Updater.St.Downloading or Updater.St.Installing ? (float)_screenT * 300 : 0;
+        Raylib.DrawRing(ic, 8 * s, 11 * s, spin + 20, spin + 160, 12, avail ? Paper.Red : Paper.Ink);
+        Raylib.DrawRing(ic, 8 * s, 11 * s, spin + 200, spin + 340, 12, avail ? Paper.Red : Paper.Ink);
+        Raylib.DrawTextEx(Gfx.Hand, txt, new Vector2(r.X + 42 * s, r.Y + (r.Height - m.Y) / 2), 19 * s, 0, st == Updater.St.Error ? Paper.Red : new Color(30, 25, 20, 255));
+        if (st == Updater.St.Downloading)
+        {
+            var bar = new Rectangle(r.X + 42 * s, r.Y + r.Height - 8 * s, r.Width - 56 * s, 4 * s);
+            Raylib.DrawRectangleRec(bar, new Color(200, 185, 150, 255));
+            Raylib.DrawRectangleRec(new Rectangle(bar.X, bar.Y, bar.Width * Updater.Progress, bar.Height), Paper.Teal);
+        }
+        Raylib.DrawTextEx(Gfx.Body, "clique, F5 ou Select", new Vector2(r.X + 12 * s, r.Y + r.Height + 4 * s), 13 * s, 0, new Color(245, 235, 215, 200));
+
+        bool click = (hover && Raylib.IsMouseButtonPressed(MouseButton.Left)) || Raylib.IsKeyPressed(KeyboardKey.F5)
+                     || (Input.Pad >= 0 && Raylib.IsGamepadButtonPressed(Input.Pad, GamepadButton.MiddleLeft));
+        if (!click) return;
+        Audio.PlaySfx(Sfx.Select);
+        if (avail) Updater.InstallAsync();
+        else if (st is Updater.St.Idle or Updater.St.UpToDate or Updater.St.Error) Updater.CheckAsync();
     }
 
     // ================================================================= preview audio

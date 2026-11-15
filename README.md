@@ -38,6 +38,8 @@ Jogo de ritmo de guitarra **nativo para Windows** (sem emulador), com controle, 
    enquanto isso; acompanhe em *Configurações > Discos*). Depois de importada, a ISO pode ser apagada: as músicas
    ficam em `%LOCALAPPDATA%\Riffstorm\biblioteca`.
 4. As **capas dos álbuns** são baixadas automaticamente (Cover Art Archive) na primeira vez que aparecem.
+5. **Atualizações:** na tela inicial, o botão no canto inferior esquerdo verifica se tem versão nova. Se tiver, é só clicar
+   nele (ou apertar F5 / Select): o jogo baixa, instala e reabre sozinho. Suas músicas, recordes e configurações continuam.
 
 ### ISOs compatíveis
 
@@ -93,6 +95,8 @@ Porta usada pelo anfitrião: **TCP 47823**.
 | Modo Fúria | △ / Y / Select | Select ou inclinar | Espaço |
 | Trocar de jogo na lista | L1 / R1 | L1 / R1 | Q / E |
 | Pausa | Start | Start | Esc |
+
+Todos os botões podem ser trocados em **Configurações > Controles**: tem o desenho da pista com o botão de cada traste embaixo e a lista das outras ações (palhetada, Modo Fúria, alavanca, pausa...). Cada um escolhe uma tecla e um botão do controle.
 
 Por padrão a palhetada é automática (basta apertar o traste na hora certa); dá para trocar em
 *Configurações > Palhetada*. Mais detalhes em `COMO JOGAR.txt`.

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Riffstorm;
@@ -128,6 +128,8 @@ public sealed class Settings
     public float SfxVol { get; set; } = 0.7f;
     public bool Fullscreen { get; set; }
     public string PlayerName { get; set; } = "Jogador";
+    public int[] KeyBinds { get; set; }             // keyboard key per Act (see Binds.cs)
+    public string[] PadBinds { get; set; }          // controller input per Act
     public int LastDifficulty { get; set; } = 1;
     public Dictionary<string, int> Best { get; set; } = new();
     public Dictionary<string, int> BestStars { get; set; } = new();

@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.InteropServices;
 using Raylib_cs;
 
@@ -35,6 +35,7 @@ public static partial class Game
         else if (_shotScreen is "setlist" or "Setlist") Go(Screen.Setlist);
         else if (_shotScreen is "settings" or "Settings") Go(Screen.Settings);
         else if (_shotScreen is "discs" or "Discs") Go(Screen.Discs);
+        else if (_shotScreen is "controls" or "Controls") Go(Screen.Controls);
         else Go(Screen.Title);
     }
 
@@ -63,7 +64,7 @@ public static partial class Game
         var b = IsoWatcher.Busy;
         if (b == null || _screen is Screen.Play or Screen.Boot or Screen.Discs) return;
         var m = Raylib.MeasureTextEx(Gfx.Hand, b, 17 * S, 0);
-        var r = new Rectangle(18 * S, Gfx.H - 52 * S, m.X + 30 * S, 34 * S);
+        var r = new Rectangle(18 * S, Gfx.H - (_screen == Screen.Title ? 128 : 52) * S, m.X + 30 * S, 34 * S);
         Raylib.DrawRectangleRounded(r, 0.4f, 8, new Color(30, 22, 15, 200));
         Raylib.DrawTextEx(Gfx.Hand, b, new Vector2(r.X + 15 * S, r.Y + 6 * S), 17 * S, 0, new Color(250, 235, 205, 255));
     }
@@ -380,7 +381,8 @@ public static partial class Game
         PumpPreview();
         var items = new List<(string label, string value, Action<int> change, Action enter)>
         {
-            ("Tipo de controle", Cfg.Controller == 0 ? "Controle (estilo PS2)" : "Guitarra", d => Cfg.Controller = 1 - Cfg.Controller, null),
+            ("Controles (mudar botões)", ">>", null, () => { _cRow = 0; _cCol = 0; _capAct = -1; Go(Screen.Controls); }),
+            ("Tipo de controle", Cfg.Controller == 0 ? "Controle (estilo PS2)" : "Guitarra", d => { Cfg.Controller = 1 - Cfg.Controller; Cfg.PadBinds = Binds.DefaultPad(Cfg.Controller); }, null),
             ("Discos (pasta ISOs)", ">>", null, () => Go(Screen.Discs)),
             ("Palhetada", Cfg.AutoStrum ? "Automática" : "Obrigatória (PS2)", d => Cfg.AutoStrum = !Cfg.AutoStrum, null),
             ("Atraso de áudio", $"{Cfg.AudioOffsetMs} ms", d => Cfg.AudioOffsetMs = Math.Clamp(Cfg.AudioOffsetMs + d * 5, -300, 500), null),
@@ -422,12 +424,15 @@ public static partial class Game
         Paper.Card(note, 2, true, false, new Color(250, 238, 160, 255));
         float nx = note.X + 26 * S;
         Paper.Text("CONTROLES", note.X + note.Width / 2, note.Y + 18 * S, 26, Paper.Red, 0.5f, 2);
-        string[] help = Cfg.Controller == 0
-            ? new[] { "Trastes (verde -> laranja):", "  L2  L1  R1  R2  X", "  (Xbox: LT LB RB RT A)", "Palhetada: D-pad cima/baixo", "Fúria: Triângulo/Y ou Select", "Alavanca: analógico direito", "Pausa: Start", "Teclado: A S D F G", "Palhetada: Enter / setas", "Fúria: Espaço  •  Pausa: Esc" }
-            : new[] { "Trastes: verde vermelho", "  amarelo azul laranja", "  (A B Y X LB)", "Palhetada: barra (D-pad)", "Alavanca: analógico direito", "Fúria: Select ou incline", "Pausa: Start", "Teclado: A S D F G", "Palhetada: Enter / setas" };
-        for (int i = 0; i < help.Length; i++)
-            Paper.Text(help[i], nx, note.Y + (66 + i * 32) * S, 17, Paper.Ink, 0, 2);
-        for (int l = 0; l < 5; l++)
+        Binds.Ensure(Cfg);
+        for (int i = 0; i < 9; i++)
+        {
+            float yy = note.Y + (62 + i * 34) * S;
+            string nm = i < 5 ? Binds.Names[i] : Binds.Names[i];
+            if (i < 5) Raylib.DrawCircleV(new Vector2(nx + 7 * S, yy + 10 * S), 7 * S, Gfx.Fret[i]);
+            Paper.Text(Paper.Fit(nm, 150 * S, 15), nx + (i < 5 ? 20 * S : 0), yy, 15, Paper.Ink, 0, 2);
+            Paper.Text(Paper.Fit($"{Binds.KeyName(Cfg.KeyBinds[i])}  |  {Binds.PadName(Cfg.PadBinds[i])}", note.Width - 190 * S, 15), note.X + note.Width - 22 * S, yy, 15, Paper.Teal, 1, 2);
+        }        for (int l = 0; l < 5; l++)
         {
             var c = new Vector2(note.X + note.Width / 2 + (l - 2) * 46 * S, note.Y + note.Height - 40 * S);
             Raylib.DrawCircleV(c, 17 * S, Paper.Ink);

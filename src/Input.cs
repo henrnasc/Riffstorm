@@ -1,4 +1,4 @@
-using Raylib_cs;
+﻿using Raylib_cs;
 
 namespace Riffstorm;
 
@@ -27,6 +27,9 @@ public static class Input
     public static string PadName = "";
 
     static readonly bool[] _prev = new bool[5];
+    /// <summary>Is each action (see <see cref="Act"/>) held right now.</summary>
+    public static readonly bool[] ActDown = new bool[Binds.Count];
+    static readonly bool[] _actPrev = new bool[Binds.Count];
     static float _lyPrev, _whPrev;
     static double _navRepeat; static int _navDir;
 
@@ -46,53 +49,45 @@ public static class Input
             PadName = n != null ? new string(n) : "Controle";
         }
 
+        Binds.Ensure(s);
         bool guitar = s.Controller == 1;
+        var kb = s.KeyBinds; var pb = s.PadBinds;
+        int pad = Pad;
+        // current state of every action (keyboard key OR controller input)
+        for (int a = 0; a < Binds.Count; a++)
+        {
+            _actPrev[a] = ActDown[a];
+            ActDown[a] = Binds.KeyDown(kb[a]) || (a != (int)Act.Whammy && Binds.PadDown(pad, pb[a]));
+        }
+        bool Pressed(Act a) => ActDown[(int)a] && !_actPrev[(int)a];
+
         Span<bool> f = stackalloc bool[5];
-        f[0] = Key(KeyboardKey.A) || Key(KeyboardKey.F1) || Key(KeyboardKey.One);
-        f[1] = Key(KeyboardKey.S) || Key(KeyboardKey.F2) || Key(KeyboardKey.Two);
-        f[2] = Key(KeyboardKey.D) || Key(KeyboardKey.F3) || Key(KeyboardKey.Three);
-        f[3] = Key(KeyboardKey.F) || Key(KeyboardKey.F4) || Key(KeyboardKey.Four);
-        f[4] = Key(KeyboardKey.G) || Key(KeyboardKey.F5) || Key(KeyboardKey.Five);
+        for (int i = 0; i < 5; i++) f[i] = ActDown[i];
 
-        bool strum = KeyP(KeyboardKey.Enter) || KeyP(KeyboardKey.KpEnter) || KeyP(KeyboardKey.Up) || KeyP(KeyboardKey.Down) || KeyP(KeyboardKey.RightShift);
-        bool star = KeyP(KeyboardKey.Space);
+        bool strum = Pressed(Act.StrumUp) || Pressed(Act.StrumDown) || KeyP(KeyboardKey.Enter) || KeyP(KeyboardKey.KpEnter);
+        bool star = Pressed(Act.Star);
         float whammy = 0;
-        if (Key(KeyboardKey.K)) whammy = 0.5f + 0.5f * MathF.Sin((float)Raylib.GetTime() * 14f);
-        bool pause = KeyP(KeyboardKey.Escape) || KeyP(KeyboardKey.P);
+        if (Binds.KeyDown(kb[(int)Act.Whammy])) whammy = 0.5f + 0.5f * MathF.Sin((float)Raylib.GetTime() * 14f);
+        whammy = Math.Max(whammy, Binds.PadValue(pad, pb[(int)Act.Whammy]));
+        ActDown[(int)Act.Whammy] |= whammy > 0.08f;
+        bool pause = Pressed(Act.Pause) || KeyP(KeyboardKey.Escape);
 
-        if (Pad >= 0)
+        if (pad >= 0)
         {
             if (!guitar)
             {
-                f[0] |= Btn(GamepadButton.LeftTrigger2) || Axis(GamepadAxis.LeftTrigger) > 0.2f;
-                f[1] |= Btn(GamepadButton.LeftTrigger1);
-                f[2] |= Btn(GamepadButton.RightTrigger1);
-                f[3] |= Btn(GamepadButton.RightTrigger2) || Axis(GamepadAxis.RightTrigger) > 0.2f;
-                f[4] |= Btn(GamepadButton.RightFaceDown);
-                star |= BtnP(GamepadButton.RightFaceUp) || BtnP(GamepadButton.MiddleLeft);
                 // left stick flick also strums
-                // right analog stick = whammy bar (any direction)
-                float rx = Axis(GamepadAxis.RightX), ry = Axis(GamepadAxis.RightY);
-                float mag = MathF.Sqrt(rx * rx + ry * ry);
-                if (mag > 0.15f) whammy = Math.Max(whammy, Math.Clamp((mag - 0.15f) / 0.85f, 0, 1));
                 float ly = Axis(GamepadAxis.LeftY);
                 if (Math.Abs(ly) > 0.6f && Math.Abs(_lyPrev) <= 0.6f) strum = true;
                 _lyPrev = ly;
             }
             else
             {
-                f[0] |= Btn(GamepadButton.RightFaceDown);
-                f[1] |= Btn(GamepadButton.RightFaceRight);
-                f[2] |= Btn(GamepadButton.RightFaceUp);
-                f[3] |= Btn(GamepadButton.RightFaceLeft);
-                f[4] |= Btn(GamepadButton.LeftTrigger1);
-                star |= BtnP(GamepadButton.MiddleLeft);
-                whammy = Math.Max(whammy, Math.Clamp((Axis(GamepadAxis.RightX) + 1) / 2, 0, 1));
+                // tilting the guitar up = star power
                 float tilt = Axis(GamepadAxis.RightY);
                 if (tilt < -0.7f && _whPrev >= -0.7f) star = true;
                 _whPrev = tilt;
             }
-            strum |= BtnP(GamepadButton.LeftFaceUp) || BtnP(GamepadButton.LeftFaceDown);
             pause |= BtnP(GamepadButton.MiddleRight);
         }
 
@@ -122,8 +117,8 @@ public static class Input
         Up = fire && dir == 1; Down = fire && dir == 2; Left = fire && dir == 3; Right = fire && dir == 4;
 
         Confirm = KeyP(KeyboardKey.Enter) || KeyP(KeyboardKey.KpEnter) || BtnP(GamepadButton.RightFaceDown) || BtnP(GamepadButton.MiddleRight);
-        PrevPage = KeyP(KeyboardKey.Q) || KeyP(KeyboardKey.PageUp) || BtnP(GamepadButton.LeftTrigger1);
-        NextPage = KeyP(KeyboardKey.E) || KeyP(KeyboardKey.PageDown) || BtnP(GamepadButton.RightTrigger1);
+        PrevPage = Pressed(Act.PrevGame) || KeyP(KeyboardKey.PageUp);
+        NextPage = Pressed(Act.NextGame) || KeyP(KeyboardKey.PageDown);
         Cancel = KeyP(KeyboardKey.Escape) || BtnP(GamepadButton.RightFaceRight);
         Back = KeyP(KeyboardKey.Escape) || KeyP(KeyboardKey.Backspace) || BtnP(GamepadButton.RightFaceRight);
         AnyKey = Raylib.GetKeyPressed() != 0 || Raylib.GetGamepadButtonPressed() != 0 || Raylib.IsMouseButtonPressed(MouseButton.Left);

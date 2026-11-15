@@ -1,4 +1,4 @@
-RIFFSTORM
+﻿RIFFSTORM
 =========
 
 Abrir: dê dois cliques em Riffstorm.exe. Não precisa instalar nada.
@@ -8,6 +8,14 @@ veja ISOs\LEIA-ME.txt com os nomes e versões aceitas). O jogo confere cada ISO 
 sozinho, em segundo plano - dá para jogar enquanto isso. Veja em Configurações > Discos.
 As músicas ficam em %LOCALAPPDATA%\Riffstorm\biblioteca; depois disso a ISO não é mais necessária.
 As capas dos álbuns são baixadas automaticamente (Cover Art Archive) na primeira vez que aparecem.
+
+ATUALIZAÇÕES
+  Na tela inicial, o botão no canto inferior esquerdo procura versão nova. Se tiver, clique nele
+  (ou F5 / Select) e o jogo se atualiza e reabre sozinho.
+
+TROCAR BOTÕES
+  Configurações > Controles: escolha a tecla e o botão do controle de cada traste e de cada ação.
+  Os botões abaixo são os padrões.
 
 ESCOLHER MÚSICA
   Cada jogo tem sua lista. L1 / R1 (ou Q / E no teclado) troca de jogo.
