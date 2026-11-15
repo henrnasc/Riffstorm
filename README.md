@@ -8,13 +8,17 @@ Jogo de ritmo de guitarra **nativo para Windows** (sem emulador), com controle, 
 > Projeto de fãs, sem fins lucrativos e sem ligação com a Activision, Harmonix, Neversoft ou RedOctane.
 > "Guitar Hero" é marca registrada dos respectivos donos e aparece aqui só para dizer quais discos são compatíveis.
 
+## ⬇️ [BAIXAR O JOGO (Riffstorm-windows.zip)](https://github.com/henrnasc/Riffstorm/releases/latest/download/Riffstorm-windows.zip)
+
+> **Atenção:** o botão verde **"Code → Download ZIP"** baixa só o código-fonte, **sem o `Riffstorm.exe`**.
+> Para jogar, use o link acima (ou a página [Releases](https://github.com/henrnasc/Riffstorm/releases/latest)).
+
 ---
 
 ## Como jogar (passo a passo)
 
-1. **Baixe** o arquivo **`Riffstorm-windows.zip`** na página
-   [**Releases**](https://github.com/henrnasc/Riffstorm/releases/latest) e extraia onde quiser
-   (ex.: `Documentos\Riffstorm`).
+1. **Baixe** o [**`Riffstorm-windows.zip`**](https://github.com/henrnasc/Riffstorm/releases/latest/download/Riffstorm-windows.zip)
+   e extraia onde quiser (ex.: `Documentos\Riffstorm`).
    Não precisa instalar nada: o .NET já vem dentro do `Riffstorm.exe`.
 2. **Coloque as ISOs** na pasta **`ISOs`** que vem junto, ao lado do `Riffstorm.exe`:
 
