@@ -13,9 +13,11 @@ public static partial class Game
     static int _capAct = -1; static bool _capPad; static double _capAt;
     static string _cNote; static double _cNoteAt = -9;
 
-    const int CRows = 10;                       // 0 lane keys, 1 lane buttons, 2..8 other actions, 9 restore
-    static int RowCols(int r) => r <= 1 ? 5 : r <= 8 ? 2 : 1;
-    static (int act, bool pad) CellAt(int r, int c) => r <= 1 ? (c, r == 1) : r <= 8 ? (r + 3, c == 1) : (-1, false);
+    const int ListN = Binds.Count - 5;          // actions below the highway
+    const int RestoreRow = ListN + 2;
+    const int CRows = ListN + 3;                // 0 lane keys, 1 lane buttons, 2.. other actions, last: restore
+    static int RowCols(int r) => r <= 1 ? 5 : r < RestoreRow ? 2 : 1;
+    static (int act, bool pad) CellAt(int r, int c) => r <= 1 ? (c, r == 1) : r < RestoreRow ? (r + 3, c == 1) : (-1, false);
 
     static void ControlsScreen()
     {
@@ -73,7 +75,7 @@ public static partial class Game
             Gfx.W - 40 * S, 44 * S, 16, Paper.InkSoft, 1, 0, Gfx.Body);
 
         // the highway sketch
-        float cx = Gfx.W / 2f, y0 = 92 * S, y1 = 282 * S, topW = 300 * S, botW = 640 * S;
+        float cx = Gfx.W / 2f, y0 = 84 * S, y1 = 232 * S, topW = 300 * S, botW = 640 * S;
         var tl = new Vector2(cx - topW / 2, y0); var tr = new Vector2(cx + topW / 2, y0);
         var bl = new Vector2(cx - botW / 2, y1); var br = new Vector2(cx + botW / 2, y1);
         Raylib.DrawTriangle(tl, bl, br, new Color(38, 32, 28, 235)); Raylib.DrawTriangle(tl, br, tr, new Color(38, 32, 28, 235));
@@ -93,7 +95,7 @@ public static partial class Game
         float laneW = botW / 5;
         for (int l = 0; l < 5; l++)
         {
-            var gc = new Vector2(bl.X + laneW * (l + 0.5f), y1 - 30 * S);
+            var gc = new Vector2(bl.X + laneW * (l + 0.5f), y1 - 26 * S);
             bool down = Input.ActDown[l];
             Raylib.DrawCircleV(gc, 24 * S, Paper.Ink);
             Raylib.DrawCircleV(gc, 20 * S, down ? Gfx.Bright(Gfx.Fret[l], 1.25f) : Gfx.Lerp(Gfx.Fret[l], new Color(40, 34, 30, 255), 0.45f));
@@ -111,26 +113,26 @@ public static partial class Game
         }
 
         // the other actions
-        var card = new Rectangle(cx - 400 * S, y1 + 102 * S, 800 * S, Gfx.H - (y1 + 102 * S) - 64 * S);
+        var card = new Rectangle(cx - 400 * S, y1 + 94 * S, 800 * S, Gfx.H - (y1 + 94 * S) - 62 * S);
         Paper.Card(card, 0.3f, true, true);
-        float rowH = (card.Height - 44 * S) / 8;
+        float rowH = (card.Height - 40 * S) / (ListN + 1);
         float colK = card.X + 380 * S, colP = card.X + 590 * S, cw = 196 * S;
         Paper.Text("TECLADO", colK + cw / 2, card.Y + 10 * S, 15, Paper.Teal, 0.5f, 0, Gfx.Bold);
         Paper.Text("CONTROLE", colP + cw / 2, card.Y + 10 * S, 15, Paper.Teal, 0.5f, 0, Gfx.Bold);
-        for (int i = 0; i < 7; i++)
+        for (int i = 0; i < ListN; i++)
         {
             int act = i + 5, row = i + 2;
-            float y = card.Y + 34 * S + i * rowH;
-            Paper.Text(Binds.Names[act], card.X + 40 * S, y + 3 * S, 19, Input.ActDown[act] ? Paper.Red : Paper.Ink);
+            float y = card.Y + 30 * S + i * rowH;
+            Paper.Text(Binds.Names[act], card.X + 40 * S, y + 1 * S, 16, Input.ActDown[act] ? Paper.Red : Paper.Ink);
             Cell(new Rectangle(colK, y, cw, rowH - 4 * S), act, false, row, 0, t, null);
             Cell(new Rectangle(colP, y, cw, rowH - 4 * S), act, true, row, 1, t, null);
         }
         {
-            float y = card.Y + 34 * S + 7 * rowH;
+            float y = card.Y + 30 * S + ListN * rowH;
             var c = new Vector2(card.X + card.Width / 2, y + rowH / 2 + 2 * S);
-            bool on = _cRow == 9;
+            bool on = _cRow == RestoreRow;
             Paper.Ribbon(c, 290 * S, rowH + 4 * S, -1, "RESTAURAR PADRÃO (F2)", true, on, t, 0.9f);
-            _cellRects.Add((9, 0, new Rectangle(c.X - 170 * S, c.Y - rowH / 2 - 4 * S, 340 * S, rowH + 8 * S)));
+            _cellRects.Add((RestoreRow, 0, new Rectangle(c.X - 170 * S, c.Y - rowH / 2 - 4 * S, 340 * S, rowH + 8 * S)));
             if (on && _capAct < 0) Paper.RedBox(new Rectangle(c.X - 180 * S, c.Y - rowH / 2 - 6 * S, 360 * S, rowH + 12 * S), t, 2.4f);
         }
 

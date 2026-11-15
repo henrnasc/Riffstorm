@@ -1,9 +1,9 @@
-using Raylib_cs;
+﻿using Raylib_cs;
 
 namespace Riffstorm;
 
 /// <summary>Game actions the player can rebind (keyboard key + controller input each).</summary>
-public enum Act { Fret0, Fret1, Fret2, Fret3, Fret4, StrumUp, StrumDown, Star, Whammy, Pause, PrevGame, NextGame }
+public enum Act { Fret0, Fret1, Fret2, Fret3, Fret4, StrumUp, StrumDown, Star, Whammy, Pause, PrevGame, NextGame, React1, React2, React3, React4 }
 
 /// <summary>
 /// Key/controller bindings. Controller codes: "B&lt;n&gt;" button, "A&lt;n&gt;+"/"A&lt;n&gt;-" axis direction,
@@ -11,18 +11,20 @@ public enum Act { Fret0, Fret1, Fret2, Fret3, Fret4, StrumUp, StrumDown, Star, W
 /// </summary>
 public static class Binds
 {
-    public const int Count = 12;
+    public const int Count = 16;
 
     public static readonly string[] Names =
     {
         "Verde", "Vermelho", "Amarelo", "Azul", "Laranja",
         "Palhetada (cima)", "Palhetada (baixo)", "Modo Fúria", "Alavanca (whammy)", "Pausa", "Jogo anterior (na lista)", "Próximo jogo (na lista)",
+        "Reação: Fogo", "Reação: Risada", "Reação: Caveira", "Reação: Palmas",
     };
 
     static readonly int[] DefKeys =
     {
         (int)KeyboardKey.A, (int)KeyboardKey.S, (int)KeyboardKey.D, (int)KeyboardKey.F, (int)KeyboardKey.G,
         (int)KeyboardKey.Up, (int)KeyboardKey.Down, (int)KeyboardKey.Space, (int)KeyboardKey.K, (int)KeyboardKey.P, (int)KeyboardKey.Q, (int)KeyboardKey.E,
+        (int)KeyboardKey.One, (int)KeyboardKey.Two, (int)KeyboardKey.Three, (int)KeyboardKey.Four,
     };
 
     static string B(GamepadButton b) => "B" + (int)b;
@@ -34,12 +36,14 @@ public static class Binds
             B(GamepadButton.RightFaceDown), B(GamepadButton.RightFaceRight), B(GamepadButton.RightFaceUp), B(GamepadButton.RightFaceLeft), B(GamepadButton.LeftTrigger1),
             B(GamepadButton.LeftFaceUp), B(GamepadButton.LeftFaceDown), B(GamepadButton.MiddleLeft), "W" + (int)GamepadAxis.RightX + ":-1", B(GamepadButton.MiddleRight),
             B(GamepadButton.LeftTrigger1), B(GamepadButton.RightTrigger1),
+            B(GamepadButton.LeftFaceLeft), B(GamepadButton.LeftFaceRight), "", "",
         }
         : new[]
         {
             B(GamepadButton.LeftTrigger2), B(GamepadButton.LeftTrigger1), B(GamepadButton.RightTrigger1), B(GamepadButton.RightTrigger2), B(GamepadButton.RightFaceDown),
             B(GamepadButton.LeftFaceUp), B(GamepadButton.LeftFaceDown), B(GamepadButton.RightFaceUp), "SR", B(GamepadButton.MiddleRight),
             B(GamepadButton.LeftTrigger1), B(GamepadButton.RightTrigger1),
+            B(GamepadButton.LeftFaceLeft), B(GamepadButton.LeftFaceRight), B(GamepadButton.LeftThumb), B(GamepadButton.RightThumb),
         };
 
     public static int[] DefaultKeys() => (int[])DefKeys.Clone();
@@ -47,8 +51,12 @@ public static class Binds
     /// <summary>Fills missing/old bindings in the settings.</summary>
     public static void Ensure(Settings s)
     {
-        if (s.KeyBinds == null || s.KeyBinds.Length != Count) s.KeyBinds = DefaultKeys();
-        if (s.PadBinds == null || s.PadBinds.Length != Count) s.PadBinds = DefaultPad(s.Controller);
+        // keep what the player already changed; new actions get their default
+        var dk = DefaultKeys(); var dp = DefaultPad(s.Controller);
+        if (s.KeyBinds == null || s.KeyBinds.Length != Count)
+        { var k = dk; if (s.KeyBinds != null) Array.Copy(s.KeyBinds, k, Math.Min(Count, s.KeyBinds.Length)); s.KeyBinds = k; }
+        if (s.PadBinds == null || s.PadBinds.Length != Count)
+        { var p = dp; if (s.PadBinds != null) Array.Copy(s.PadBinds, p, Math.Min(Count, s.PadBinds.Length)); s.PadBinds = p; }
     }
 
     // ------------------------------------------------------------------ reading

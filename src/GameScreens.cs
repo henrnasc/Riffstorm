@@ -36,6 +36,7 @@ public static partial class Game
         else if (_shotScreen is "settings" or "Settings") Go(Screen.Settings);
         else if (_shotScreen is "discs" or "Discs") Go(Screen.Discs);
         else if (_shotScreen is "controls" or "Controls") Go(Screen.Controls);
+        else if (_shotScreen is "online" or "Online") Go(Screen.Online);
         else Go(Screen.Title);
     }
 
@@ -271,6 +272,7 @@ public static partial class Game
     static void LoadingScreen()
     {
         double t = _screenT;
+        if (_online && DrawRoulette()) return;          // the song is still loading behind the draw
         Paper.Backdrop(t);
         Paper.Polaroid(_song, new Vector2(Gfx.W / 2f, 210 * S), 220 * S, -3 + MathF.Sin((float)t * 1.5f) * 1.5f);
         Paper.Ribbon(new Vector2(Gfx.W / 2f, 420 * S), 330 * S, 58 * S, 1.5f, "CARREGANDO...", true, false, t);
@@ -289,7 +291,7 @@ public static partial class Game
                 if (Input.Back || Input.Confirm) Go(Screen.OnlineResults);
                 return;
             }
-            if (_loadTask.IsCompletedSuccessfully && !_sentLoaded && _screenT > 0.6) { _sentLoaded = true; Net.Send(new Msg { T = "loaded" }); }
+            if (_loadTask.IsCompletedSuccessfully && !_sentLoaded && _screenT > (_rollCands.Distinct().Count() > 1 ? RollTime + 1.2 : 0.6)) { _sentLoaded = true; Net.Send(new Msg { T = "loaded" }); }
             if (_sentLoaded)
             {
                 int waiting = Net.Players.Count(p => !p.Loaded);

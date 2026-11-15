@@ -39,6 +39,7 @@ public static partial class Game
                 case "--autoready": _autoReady = true; break;
                 case "--no-iso": _noIso = true; break;
                 case "--autoupdate": _autoUpdate = true; break;
+                case "--autoreact": _autoReact = true; break;
                 case "--loopback": NetServer.LoopbackOnly = true; break;
                 case "--shot": _shotScreen = args[++i]; _shotAt = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); _shotFile = args[++i]; break;
             }
@@ -356,6 +357,7 @@ public static partial class Game
         double start = _demoSong != null || (_online && _demoSeek > 0) ? _demoSeek : -2.0;
         _sentNext = 0; _nextState = 0; _quitAsk = false;
         if (_online) CreateGhosts(); else ClearGhosts();
+        ResetOnlineFun();
         if (start > 0)
         {
             // demo seek: mark earlier notes as already passed
@@ -439,7 +441,15 @@ public static partial class Game
         var view = new Rectangle(0, 0, Gfx.W, Gfx.H);
         _hw.Draw(p, t, dt, view, p.StarActive);
         Highway.DrawHud(p, view, t);
-        if (_online) DrawScoreboard();
+        if (_online)
+        {
+            DrawScoreboard();
+            LeaderWatch(t);
+            DrawFeed();
+            DrawReactions();
+            if (!_ended) ReactionInput();
+        }
+        DrawProgress(t, p);
 
         // intro card
         if (t < 3.0)

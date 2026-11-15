@@ -66,7 +66,9 @@ public static partial class Game
         var g = _ghosts.FirstOrDefault(x => x.Id == m.Id);
         if (g == null) return;
         var p = g.P;
+        int oldStreak = p.Streak; bool oldStar = p.StarActive, oldFailed = p.Failed;
         p.Score = m.Score; p.Streak = m.Streak; p.Energy = m.Energy; p.Meter = m.Meter; p.StarActive = m.Star; p.Failed = m.Failed;
+        AnnounceChanges(m.Id, oldStreak, p.Streak, oldStar, p.StarActive, oldFailed, p.Failed);
         if (string.IsNullOrEmpty(m.Res)) return;
         for (int i = 0; i < m.Res.Length; i++)
         {
@@ -207,12 +209,15 @@ public static partial class Game
                     var me = Net.Me;
                     _online = true; _goAt = -1; _sentLoaded = false; _quitAsk = false; _pickMode = false; _rows = null;
                     if (s == null || me == null) { Net.Send(new Msg { T = "done", Failed = true }); Go(Screen.OnlineResults); break; }
-                    _previewFor = null;
+                    _previewFor = null; _listenKey = null;
+                    _rollCands = (m.Songs ?? new()).Select(Net.FindSong).Where(x => x != null).ToList();
+                    _rollLast = -1; _rollDing = false;
                     StartSong(s, Math.Clamp(me.Diff, 0, 3));
                     break;
                 }
                 case "go": _goAt = Net.ToLocal(m.Time); break;
                 case "st": ApplyGhost(m); break;
+                case "react": if (_screen == Screen.Play) AddReaction(m.Id, m.Diff); break;
             }
         }
     }
@@ -302,71 +307,90 @@ public static partial class Game
     {
         double t = _screenT;
         PumpPreview();
+        Lan.Start();
         if (Raylib.GetTime() - _addrAt > 3) { _addr = Net.BestAddress(); _addrAt = Raylib.GetTime(); }
         Paper.Backdrop(t);
         Paper.Ribbon(new Vector2(250 * S, 62 * S), 360 * S, 62 * S, -2, "MULTIPLAYER ONLINE", true, false, t, 0.9f);
 
+        var rooms = Lan.Rooms;
+        int n = Math.Min(4, rooms.Count);
+        int iCode = 2 + n, iJoin = 3 + n, total = 4 + n;
+        _onSel = Math.Clamp(_onSel, 0, total - 1);
+
         // ---- left: the form
-        var card = new Rectangle(50 * S, 120 * S, 620 * S, Gfx.H - 200 * S);
+        var card = new Rectangle(50 * S, 120 * S, 640 * S, Gfx.H - 196 * S);
         Paper.Card(card, -0.4f, true, true);
         bool busy = _connectTask != null;
         string name = Cfg.PlayerName ?? "";
-        float x0 = card.X + 50 * S;
-        float[] ys = { card.Y + 40 * S, card.Y + 150 * S, card.Y + 250 * S, card.Y + 360 * S, card.Y + 440 * S };
+        float x0 = card.X + 50 * S, y0 = card.Y;
 
-        // 0 name
-        Paper.Text("Seu nome (aparece no placar):", x0, ys[0], 20, Paper.InkSoft);
-        var nameBox = new Rectangle(x0, ys[0] + 32 * S, 400 * S, 44 * S);
+        Paper.Text("Seu nome (aparece no placar):", x0, y0 + 24 * S, 19, Paper.InkSoft);
+        var nameBox = new Rectangle(x0, y0 + 52 * S, 400 * S, 42 * S);
         DrawField(nameBox, name, _onSel == 0, t);
-        // 1 create
-        var c1 = new Vector2(x0 + 200 * S, ys[1] + 18 * S);
-        Paper.Ribbon(c1, 330 * S, 52 * S, -1.5f, "CRIAR SALA", !busy, _onSel == 1, t);
-        // 2 code
-        Paper.Text("Código da sala do amigo:", x0, ys[2] - 10 * S, 20, Paper.InkSoft);
-        var codeBox = new Rectangle(x0, ys[2] + 22 * S, 400 * S, 44 * S);
-        DrawField(codeBox, _codeText, _onSel == 2, t, "ex.: 4F2-K9QA");
-        // 3 join
-        var c3 = new Vector2(x0 + 200 * S, ys[3] + 18 * S);
-        Paper.Ribbon(c3, 330 * S, 52 * S, 1.5f, busy ? "CONECTANDO..." : "ENTRAR NA SALA", !busy, _onSel == 3, t);
-        // 4 back
-        var c4 = new Vector2(x0 + 200 * S, ys[4] + 18 * S);
-        Paper.Ribbon(c4, 220 * S, 44 * S, -1, "VOLTAR", true, _onSel == 4, t);
 
-        // selection marker
-        Rectangle selR = _onSel switch
+        var c1 = new Vector2(x0 + 200 * S, y0 + 136 * S);
+        Paper.Ribbon(c1, 330 * S, 48 * S, -1.5f, "CRIAR SALA", !busy, _onSel == 1, t);
+
+        Paper.Text("SALAS DISPONÍVEIS", x0, y0 + 186 * S, 21, Paper.Teal);
+        Paper.Text("(Radmin VPN / mesma rede)", x0 + 220 * S, y0 + 190 * S, 15, Paper.InkSoft, 0, 0, Gfx.Body);
+        var roomRects = new List<Rectangle>();
+        if (n == 0)
         {
-            0 => nameBox, 2 => codeBox,
-            1 => new Rectangle(c1.X - 190 * S, c1.Y - 34 * S, 380 * S, 68 * S),
-            3 => new Rectangle(c3.X - 190 * S, c3.Y - 34 * S, 380 * S, 68 * S),
-            _ => new Rectangle(c4.X - 135 * S, c4.Y - 30 * S, 270 * S, 60 * S),
-        };
+            string dots = new string('.', 1 + (int)(t * 2) % 3);
+            Paper.Text("Procurando salas" + dots, x0 + 10 * S, y0 + 226 * S, 18, Paper.InkSoft);
+            Paper.Text("Quando um amigo criar uma sala, ela aparece aqui.", x0 + 10 * S, y0 + 254 * S, 15, Paper.InkSoft, 0, 0, Gfx.Body);
+        }
+        for (int i = 0; i < n; i++)
+        {
+            var rm = rooms[i];
+            var r = new Rectangle(x0, y0 + 220 * S + i * 46 * S, card.Width - 100 * S, 40 * S);
+            roomRects.Add(r);
+            bool ok = rm.Ver == Net.Version, playing = rm.Phase != "lobby", full = rm.Players >= rm.Max;
+            Raylib.DrawRectangleRec(r, new Color(255, 251, 238, 225));
+            Raylib.DrawRectangleLinesEx(r, 1.5f * S, Paper.InkSoft);
+            Paper.Text(Paper.Fit("Sala de " + rm.Host, r.Width - 230 * S, 20), r.X + 14 * S, r.Y + 8 * S, 20, Paper.Ink);
+            string st = !ok ? "versão diferente" : full ? "cheia" : playing ? "em partida" : "esperando";
+            Paper.Text($"{rm.Players}/{rm.Max}  •  {st}", r.X + r.Width - 14 * S, r.Y + 11 * S, 16, ok && !full && !playing ? new Color(30, 130, 50, 255) : Paper.Red, 1, 0, Gfx.Body);
+            if (_onSel == 2 + i) Paper.RedBox(new Rectangle(r.X - 4 * S, r.Y - 3 * S, r.Width + 8 * S, r.Height + 6 * S), t, 2.4f);
+        }
+
+        float cy = y0 + 420 * S;
+        Paper.Text("Ou digite o código da sala:", x0, cy, 18, Paper.InkSoft);
+        var codeBox = new Rectangle(x0, cy + 26 * S, 300 * S, 42 * S);
+        DrawField(codeBox, _codeText, _onSel == iCode, t, "ex.: 4F2-K9QA");
+        var c3 = new Vector2(x0 + 430 * S, cy + 47 * S);
+        Paper.Ribbon(c3, 180 * S, 42 * S, 1.5f, busy ? "..." : "ENTRAR", !busy, _onSel == iJoin, t);
+
+        // selection arrow
+        Rectangle selR = _onSel == 0 ? nameBox : _onSel == 1 ? new Rectangle(c1.X - 190 * S, c1.Y - 30 * S, 380 * S, 60 * S)
+            : _onSel == iCode ? codeBox : _onSel == iJoin ? new Rectangle(c3.X - 110 * S, c3.Y - 26 * S, 220 * S, 52 * S) : roomRects[_onSel - 2];
         Paper.Arrow(new Vector2(selR.X - 8 * S, selR.Y + selR.Height / 2), t, 40);
 
         string status = _onStatus ?? Net.Error;
-        if (status != null) Paper.Text(Paper.Fit(status, card.Width + 520 * S, 17, Gfx.Body), card.X + 30 * S, card.Y + card.Height + 14 * S, 17, Paper.Red, 0, 0, Gfx.Body);
+        if (status != null) Paper.Text(Paper.Fit(status, Gfx.W - 100 * S, 17, Gfx.Body), card.X + 30 * S, card.Y + card.Height + 12 * S, 17, Paper.Red, 0, 0, Gfx.Body);
 
         // ---- right: how it works + Radmin status
-        var info = new Rectangle(card.X + card.Width + 40 * S, 120 * S, Gfx.W - card.X - card.Width - 90 * S, 380 * S);
+        var info = new Rectangle(card.X + card.Width + 36 * S, 120 * S, Gfx.W - card.X - card.Width - 80 * S, 360 * S);
         Paper.Card(info, 0.8f, true, false, new Color(250, 238, 160, 255));
-        float ix = info.X + 26 * S, iy = info.Y + 24 * S, iw = info.Width - 52 * S;
-        Paper.Text("Como jogar com os amigos", ix, iy, 24, Paper.Red, 0, 0.8f); iy += 46 * S;
+        float ix = info.X + 24 * S, iy = info.Y + 22 * S, iw = info.Width - 48 * S;
+        Paper.Text("Como jogar com os amigos", ix, iy, 23, Paper.Red, 0, 0.8f); iy += 44 * S;
         string[] steps =
         {
-            "1. Todos instalam o Radmin VPN e entram",
+            "1. Todos ligam o Radmin VPN e entram",
             "   na mesma rede dele.",
-            "2. Um de vocês clica em CRIAR SALA e",
-            "   passa o código para os outros.",
-            "3. Os outros digitam o código e entram.",
+            "2. Um de vocês clica em CRIAR SALA.",
+            "3. Os outros escolhem a sala em",
+            "   SALAS DISPONÍVEIS (ou usam o código).",
             "4. Só aparecem as músicas que todos têm.",
         };
-        foreach (var s in steps) { Paper.Text(s, ix, iy, 17, Paper.Ink, 0, 0.8f, Gfx.Body); iy += 27 * S; }
-        iy += 14 * S;
+        foreach (var s in steps) { Paper.Text(Paper.Fit(s, iw, 16, Gfx.Body), ix, iy, 16, Paper.Ink, 0, 0.8f, Gfx.Body); iy += 26 * S; }
+        iy += 12 * S;
         if (_addr is var (ip, via) && via == "Radmin VPN")
-            Paper.Text($"Radmin VPN ligado  ({ip})", ix, iy, 18, new Color(30, 120, 50, 255), 0, 0.8f, Gfx.Bold);
+            Paper.Text($"Radmin VPN ligado  ({ip})", ix, iy, 17, new Color(30, 120, 50, 255), 0, 0.8f, Gfx.Bold);
         else
-            Paper.Text("Radmin VPN não encontrado neste PC", ix, iy, 18, Paper.Red, 0, 0.8f, Gfx.Bold);
-        iy += 34 * S;
-        Paper.Text(Paper.Fit("Na 1ª vez o Windows pode pedir permissão de rede: permita.", iw, 15, Gfx.Body), ix, iy, 15, Paper.InkSoft, 0, 0.8f, Gfx.Body);
+            Paper.Text("Radmin VPN não encontrado neste PC", ix, iy, 17, Paper.Red, 0, 0.8f, Gfx.Bold);
+        iy += 32 * S;
+        Paper.Text(Paper.Fit("Na 1ª vez o Windows pode pedir permissão de rede: permita.", iw, 14, Gfx.Body), ix, iy, 14, Paper.InkSoft, 0, 0.8f, Gfx.Body);
 
         Paper.Hints((Paper.Blue, "Confirmar"), (Paper.RedGem, "Voltar (Esc)"));
 
@@ -374,43 +398,55 @@ public static partial class Game
         if (_connectTask is { IsCompleted: true })
         {
             string err = _connectTask.Result; _connectTask = null;
-            if (err == null) { Cfg.Save(); _onStatus = null; Go(Screen.Lobby); _lobbySel = 0; return; }
+            if (err == null) { Cfg.Save(); _onStatus = null; Lan.Stop(); Go(Screen.Lobby); _lobbySel = 0; return; }
             _onStatus = err;
         }
         if (busy) return;
 
         // ---- input
         if (_onSel == 0 && EditText(ref name, 16, false)) { Cfg.PlayerName = name; _onStatus = null; }
-        if (_onSel == 2 && EditText(ref _codeText, 21, true)) _onStatus = null;
-        if (Input.Up) { _onSel = (_onSel + 4) % 5; Audio.PlaySfx(Sfx.Click); }
-        if (Input.Down) { _onSel = (_onSel + 1) % 5; Audio.PlaySfx(Sfx.Click); }
-        if (Input.Cancel) { Audio.PlaySfx(Sfx.Back); Net.Error = null; _onStatus = null; Go(Screen.Title); return; }
-        if (Input.Confirm)
+        if (_onSel == iCode && EditText(ref _codeText, 21, true)) _onStatus = null;
+        if (Input.Up) { _onSel = (_onSel + total - 1) % total; Audio.PlaySfx(Sfx.Click); }
+        if (Input.Down) { _onSel = (_onSel + 1) % total; Audio.PlaySfx(Sfx.Click); }
+        // mouse
+        var mp = Raylib.GetMousePosition();
+        bool click = false;
+        void Hover(Rectangle r, int idx) { if (Raylib.CheckCollisionPointRec(mp, r) && (Raylib.GetMouseDelta() != Vector2.Zero || Raylib.IsMouseButtonPressed(MouseButton.Left))) { _onSel = idx; if (Raylib.IsMouseButtonPressed(MouseButton.Left)) click = true; } }
+        Hover(nameBox, 0); Hover(new Rectangle(c1.X - 165 * S, c1.Y - 24 * S, 330 * S, 48 * S), 1);
+        for (int i = 0; i < roomRects.Count; i++) Hover(roomRects[i], 2 + i);
+        Hover(codeBox, iCode); Hover(new Rectangle(c3.X - 90 * S, c3.Y - 21 * S, 180 * S, 42 * S), iJoin);
+
+        if (Input.Cancel) { Audio.PlaySfx(Sfx.Back); Net.Error = null; _onStatus = null; Lan.Stop(); Go(Screen.Title); return; }
+        bool activate = Input.Confirm || (click && _onSel != 0 && _onSel != iCode);
+        if (!activate) return;
+        Net.Error = null;
+        string nm = string.IsNullOrWhiteSpace(Cfg.PlayerName) ? "Jogador" : Cfg.PlayerName.Trim();
+        Cfg.PlayerName = nm;
+        if (_onSel == 0) _onSel = 1;
+        else if (_onSel == 1)
         {
-            Net.Error = null;
-            string nm = string.IsNullOrWhiteSpace(Cfg.PlayerName) ? "Jogador" : Cfg.PlayerName.Trim();
-            Cfg.PlayerName = nm;
-            switch (_onSel)
-            {
-                case 0: _onSel = 1; break;
-                case 1:
-                    Audio.PlaySfx(Sfx.Select);
-                    _onStatus = "Abrindo a sala...";
-                    _connectTask = Task.Run(() => Net.Host(nm, Cfg.LastDifficulty));
-                    break;
-                case 2: _onSel = 3; break;
-                case 3:
-                {
-                    var ip2 = Net.ParseCode(_codeText);
-                    if (ip2 == null) { _onStatus = "Código inválido. Ele tem 7 letras/números, tipo 4F2-K9QA."; Audio.PlaySfx(Sfx.Back); break; }
-                    Audio.PlaySfx(Sfx.Select);
-                    _onStatus = "Conectando...";
-                    string code = _codeText;
-                    _connectTask = Task.Run(() => Net.Join(ip2, nm, Cfg.LastDifficulty, code));
-                    break;
-                }
-                case 4: Audio.PlaySfx(Sfx.Back); Go(Screen.Title); break;
-            }
+            Audio.PlaySfx(Sfx.Select);
+            _onStatus = "Abrindo a sala...";
+            _connectTask = Task.Run(() => Net.Host(nm, Cfg.LastDifficulty));
+        }
+        else if (_onSel >= 2 && _onSel < iCode)
+        {
+            var rm = rooms[_onSel - 2];
+            if (rm.Ver != Net.Version) { _onStatus = "Essa sala é de outra versão do Riffstorm. Atualizem o jogo (botão na tela inicial)."; Audio.PlaySfx(Sfx.Back); return; }
+            Audio.PlaySfx(Sfx.Select);
+            _onStatus = $"Entrando na sala de {rm.Host}...";
+            var rip = rm.Ip;
+            _connectTask = Task.Run(() => Net.Join(rip, nm, Cfg.LastDifficulty, Net.CodeFor(rip)));
+        }
+        else if (_onSel == iCode) _onSel = iJoin;
+        else
+        {
+            var ip2 = Net.ParseCode(_codeText);
+            if (ip2 == null) { _onStatus = "Código inválido. Ele tem 7 letras/números, tipo 4F2-K9QA."; Audio.PlaySfx(Sfx.Back); return; }
+            Audio.PlaySfx(Sfx.Select);
+            _onStatus = "Conectando...";
+            string code = _codeText;
+            _connectTask = Task.Run(() => Net.Join(ip2, nm, Cfg.LastDifficulty, code));
         }
     }
 
@@ -431,21 +467,22 @@ public static partial class Game
     static int _lobbySel;
     static string _lobbyPreviewKey;
     static bool _pickMode;
+    static string _listenKey;                  // pick being previewed on THIS computer only
+    static List<Song> _rollCands = new();      // songs in the draw (roulette on the loading screen)
 
+    /// <summary>Everyone may put one song in the draw, take it out, and listen to the others' picks
+    /// (one preview at a time, only on their own PC). The host's "Sortear" picks one at random.</summary>
     static void LobbyScreen()
     {
         double t = _screenT;
         if (!Net.Active) { Go(Screen.Online); return; }
         var me = Net.Me;
         bool host = me?.Host == true;
-        var song = Net.FindSong(Net.Song);
 
-        // preview the chosen song
-        if (Net.Song != _lobbyPreviewKey)
-        {
-            _lobbyPreviewKey = Net.Song;
-            if (song != null) { Audio.Stop(); PlayPreview(song, 0); }
-        }
+        var picks = Net.Players.Where(p => p.Pick != null).Select(p => (player: p, song: Net.FindSong(p.Pick))).Where(x => x.song != null).ToList();
+        // stop the preview when it is no longer in the draw; no music unless someone asks to listen
+        if (_listenKey != null && !picks.Any(x => x.player.Pick == _listenKey)) { _listenKey = null; Audio.Stop(); _previewFor = null; }
+        if (_listenKey == null && _previewFor != null) { Audio.Stop(); _previewFor = null; }
         PumpPreview();
 
         Paper.Backdrop(t);
@@ -461,7 +498,7 @@ public static partial class Game
         if (host && Net.RoomVia != "Radmin VPN") Paper.Text("Ligue o Radmin VPN!", note.X + note.Width - 20 * S, note.Y + 42 * S, 15, Paper.Red, 1, 1.2f, Gfx.Bold);
 
         // ---- players
-        var page = new Rectangle(40 * S, 110 * S, 600 * S, Gfx.H - 176 * S);
+        var page = new Rectangle(40 * S, 110 * S, 560 * S, Gfx.H - 176 * S);
         Paper.Card(page, 0, true, true);
         Paper.Text($"JOGADORES ({Net.Players.Count}/{NetServer.MaxPlayers})", page.X + 64 * S, page.Y + 30 * S, 22, Paper.Teal);
         float rowH = (page.Height - 90 * S) / NetServer.MaxPlayers;
@@ -480,65 +517,91 @@ public static partial class Game
             Gfx.Text(Gfx.Bold, (i + 1).ToString(), dc.X, dc.Y - 10 * S, 17, Color.White, 0.5f);
             string nm = p.Name + (p.Id == Net.MyId ? "  (você)" : "");
             Paper.Text(Paper.Fit(nm, 250 * S, 22), page.X + 108 * S, y + 2 * S, 22, p.Id == Net.MyId ? Paper.Ink : Paper.InkSoft);
-            Paper.Text(Chart.DiffNames[Math.Clamp(p.Diff, 0, 3)], page.X + 108 * S, y + 30 * S, 15, Paper.InkSoft, 0, 0, Gfx.Body);
+            var ps = Net.FindSong(p.Pick);
+            string line2 = Chart.DiffNames[Math.Clamp(p.Diff, 0, 3)] + (ps != null ? "  •  escolheu: " + ps.Name : "  •  ainda não escolheu");
+            Paper.Text(Paper.Fit(line2, page.Width - 140 * S, 15, Gfx.Body), page.X + 108 * S, y + 30 * S, 15, Paper.InkSoft, 0, 0, Gfx.Body);
             string st = p.Host ? "ANFITRIÃO" : p.Ready ? "PRONTO!" : "esperando...";
             var sc = p.Host ? Paper.Teal : p.Ready ? new Color(30, 130, 50, 255) : Gfx.A(Paper.InkSoft, 0.7f);
-            Paper.Text(st, page.X + page.Width - 34 * S, y + 8 * S, 20, sc, 1);
+            Paper.Text(st, page.X + page.Width - 30 * S, y + 4 * S, 18, sc, 1);
         }
 
-        // ---- right column: chosen song, difficulty, menu
+        // ---- right column: the draw, difficulty, menu
         float colX = page.X + page.Width + 30 * S, colW = Gfx.W - colX - 30 * S, cx = colX + colW / 2;
-        if (song != null)
+        Paper.Text("MÚSICAS DO SORTEIO", colX, 116 * S, 22, Paper.Red);
+        Paper.Text($"{Net.Common.Count} músicas que todos têm", colX + colW, 122 * S, 14, Paper.InkSoft, 1, 0, Gfx.Body);
+
+        bool mine = me?.Pick != null;
+        bool allReady = Net.Players.Count > 0 && Net.Players.All(p => p.Host || p.Ready);
+        var items = new List<string> { mine ? "TROCAR MINHA MÚSICA" : "ESCOLHER MINHA MÚSICA" };
+        if (mine) items.Add("TIRAR MINHA MÚSICA");
+        items.Add(host ? "SORTEAR E COMEÇAR!" : me?.Ready == true ? "NÃO ESTOU PRONTO" : "ESTOU PRONTO!");
+        items.Add("SAIR DA SALA");
+        int total = picks.Count + items.Count;
+        _lobbySel = Math.Clamp(_lobbySel, 0, total - 1);
+
+        float py0 = 150 * S, ph = 44 * S;
+        if (picks.Count == 0)
+            Paper.Text("Ninguém escolheu ainda. Escolha a sua!", cx, py0 + 40 * S, 18, Paper.InkSoft, 0.5f);
+        for (int i = 0; i < picks.Count; i++)
         {
-            Paper.Polaroid(song, new Vector2(cx - 140 * S, 225 * S), 140 * S, -3 + MathF.Sin((float)t * 0.8f) * 0.6f);
-            float tx = cx - 40 * S;
-            Paper.Text(Paper.Fit(song.Name, colX + colW - tx, 26), tx, 170 * S, 26, Paper.Ink);
-            Paper.Text(Paper.Fit(song.Artist, colX + colW - tx, 19), tx, 206 * S, 19, Paper.Red);
-            Paper.Text(SongDb.Games.FirstOrDefault(g => g.Id == song.Game)?.Name ?? "", tx, 236 * S, 15, Paper.InkSoft, 0, 0, Gfx.Body);
+            var (p, s) = picks[i];
+            var r = new Rectangle(colX, py0 + i * ph, colW, ph - 6 * S);
+            bool sel = _lobbySel == i, listening = _listenKey == p.Pick;
+            Raylib.DrawRectangleRec(r, listening ? new Color(255, 236, 170, 235) : new Color(255, 251, 238, 200));
+            int slot = Net.Players.IndexOf(p);
+            Raylib.DrawRectangle((int)r.X, (int)r.Y, (int)(5 * S), (int)r.Height, SlotColors[Math.Max(0, slot) % SlotColors.Length]);
+            Covers.Draw(s, new Rectangle(r.X + 10 * S, r.Y + 3 * S, r.Height - 6 * S, r.Height - 6 * S), Color.White);
+            float tx = r.X + r.Height + 12 * S;
+            Paper.Text(Paper.Fit($"{s.Name} - {s.Artist}", r.X + r.Width - tx - 110 * S, 17), tx, r.Y + 2 * S, 17, Paper.Ink);
+            Paper.Text("de " + p.Name, tx, r.Y + 21 * S, 13, Paper.InkSoft, 0, 0, Gfx.Body);
+            if (listening)
+            {
+                // little equalizer while it plays
+                for (int b = 0; b < 4; b++)
+                {
+                    float hgt = (6 + 10 * MathF.Abs(MathF.Sin((float)t * (5 + b * 1.7f) + b))) * S;
+                    Raylib.DrawRectangle((int)(r.X + r.Width - 100 * S + b * 7 * S), (int)(r.Y + r.Height - 8 * S - hgt), (int)(5 * S), (int)hgt, Paper.Red);
+                }
+                Paper.Text("ouvindo", r.X + r.Width - 10 * S, r.Y + 10 * S, 14, Paper.Red, 1, 0, Gfx.Bold);
+            }
+            else if (sel) Paper.Text("ouvir", r.X + r.Width - 10 * S, r.Y + 10 * S, 14, Paper.Teal, 1, 0, Gfx.Bold);
+            if (sel) Paper.RedBox(new Rectangle(r.X - 4 * S, r.Y - 3 * S, r.Width + 8 * S, r.Height + 6 * S), t, 2.4f);
         }
-        else
-        {
-            Paper.Text(host ? "Escolha a música da partida" : "O anfitrião está escolhendo a música...", cx, 190 * S, 22, Paper.InkSoft, 0.5f);
-        }
-        Paper.Text($"{Net.Common.Count} músicas que todos têm", cx, 300 * S, 15, Paper.InkSoft, 0.5f, 0, Gfx.Body);
 
         // difficulty (each player picks their own)
         int diff = Math.Clamp(me?.Diff ?? Cfg.LastDifficulty, 0, 3);
-        float dy = 360 * S, dw = colW / 4;
+        float dy = 438 * S, dw = colW / 4;
         for (int d = 0; d < 4; d++)
         {
             var c = new Vector2(colX + dw * d + dw / 2, dy);
             bool on = d == diff;
-            Paper.Ribbon(c, dw * 0.78f, 32 * S, d % 2 == 0 ? -2 : 2, Chart.DiffNames[d].ToUpperInvariant(), on, false, t + d, 1.1f);
-            if (on) Paper.RedCircle(c, dw * 0.55f, 28 * S, t);
+            Paper.Ribbon(c, dw * 0.78f, 30 * S, d % 2 == 0 ? -2 : 2, Chart.DiffNames[d].ToUpperInvariant(), on, false, t + d, 1.1f);
+            if (on) Paper.RedCircle(c, dw * 0.55f, 26 * S, t);
         }
 
         // menu
-        bool allReady = Net.Players.Count > 0 && Net.Players.All(p => p.Host || p.Ready);
-        string[] items = host
-            ? new[] { "ESCOLHER MÚSICA", "COMEÇAR!", "SAIR DA SALA" }
-            : new[] { me?.Ready == true ? "NÃO ESTOU PRONTO" : "ESTOU PRONTO!", "SAIR DA SALA" };
-        _lobbySel = Math.Clamp(_lobbySel, 0, items.Length - 1);
-        for (int i = 0; i < items.Length; i++)
+        for (int i = 0; i < items.Count; i++)
         {
-            var c = new Vector2(cx, 438 * S + i * 64 * S);
-            bool enabled = !(host && i == 1 && (song == null || !allReady));
-            Paper.Ribbon(c, 300 * S, 48 * S, i % 2 == 0 ? -1.2f : 1.2f, items[i], enabled, i == _lobbySel, t + i);
-            if (i == _lobbySel) Paper.RedBox(new Rectangle(c.X - 175 * S, c.Y - 30 * S, 350 * S, 60 * S), t);
+            var c = new Vector2(cx, 492 * S + i * 44 * S);
+            bool enabled = !(items[i] == "SORTEAR E COMEÇAR!" && (picks.Count == 0 || !allReady));
+            bool sel = _lobbySel == picks.Count + i;
+            Paper.Ribbon(c, 320 * S, 36 * S, i % 2 == 0 ? -1.2f : 1.2f, items[i], enabled, sel, t + i, 0.95f);
+            if (sel) Paper.RedBox(new Rectangle(c.X - 185 * S, c.Y - 22 * S, 370 * S, 44 * S), t);
         }
-        if (host && song != null && !allReady) Paper.Text("Esperando todos ficarem PRONTOS", cx, 438 * S + items.Length * 64 * S - 18 * S, 15, Paper.Red, 0.5f, 0, Gfx.Body);
+        if (host && picks.Count > 0 && !allReady) Paper.Text("Esperando todos ficarem PRONTOS", cx, 492 * S + items.Count * 44 * S - 16 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
+        else if (host && picks.Count == 0) Paper.Text("Alguém precisa escolher uma música", cx, 492 * S + items.Count * 44 * S - 16 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
         if (Net.Error != null) Paper.Text(Net.Error, cx, Gfx.H - 96 * S, 15, Paper.Red, 0.5f, 0, Gfx.Body);
 
-        Paper.Hints((Paper.Blue, "Confirmar"), (Paper.YellowGem, "< > Dificuldade"), (Paper.RedGem, "Sair da sala"));
+        Paper.Hints((Paper.Blue, "Confirmar / ouvir"), (Paper.YellowGem, "< > Dificuldade"), (Paper.RedGem, "Sair da sala"));
 
         // ---- automation (tests)
         if (_autoReady && me != null && !me.Host && !me.Ready && _screenT > 0.5) Net.Send(new Msg { T = "ready", Ready = true });
-        if (host && _autoPick != null && Net.Song == null && _screenT > 0.5)
+        if (_autoPick != null && me != null && me.Pick == null && _screenT > 0.5 && Raylib.GetTime() - _autoStartedAt > 1)
         {
-            var ps = SongDb.Songs.FirstOrDefault(s => s.Key == _autoPick || s.Id == _autoPick);
-            if (ps != null && Net.Common.Contains(Net.SongKey(ps))) Net.Send(new Msg { T = "pick", Song = Net.SongKey(ps) });
+            var aps = SongDb.Songs.FirstOrDefault(s => s.Key == _autoPick || s.Id == _autoPick);
+            if (aps != null && Net.Common.Contains(Net.SongKey(aps))) { Net.Send(new Msg { T = "pick", Song = Net.SongKey(aps) }); _autoStartedAt = Raylib.GetTime(); }
         }
-        if (host && _autoStart > 0 && Net.Players.Count >= _autoStart && allReady && song != null && Net.Phase == "lobby" && Raylib.GetTime() - _autoStartedAt > 3)
+        if (host && _autoStart > 0 && Net.Players.Count >= _autoStart && Net.Players.All(p => p.Pick != null) && allReady && Net.Phase == "lobby" && Raylib.GetTime() - _autoStartedAt > 3)
         { _autoStartedAt = Raylib.GetTime(); Net.Send(new Msg { T = "start" }); }
 
         // ---- input
@@ -547,33 +610,85 @@ public static partial class Game
             int nd = Math.Clamp(diff + (Input.Right ? 1 : -1), 0, 3);
             if (nd != diff) { Cfg.LastDifficulty = nd; Net.Send(new Msg { T = "diff", Diff = nd }); Audio.PlaySfx(Sfx.Click); if (me != null) me.Diff = nd; }
         }
-        if (Input.Up) { _lobbySel = (_lobbySel + items.Length - 1) % items.Length; Audio.PlaySfx(Sfx.Click); }
-        if (Input.Down) { _lobbySel = (_lobbySel + 1) % items.Length; Audio.PlaySfx(Sfx.Click); }
+        if (Input.Up) { _lobbySel = (_lobbySel + total - 1) % total; Audio.PlaySfx(Sfx.Click); }
+        if (Input.Down) { _lobbySel = (_lobbySel + 1) % total; Audio.PlaySfx(Sfx.Click); }
         bool leave = Input.Back;
         if (Input.Confirm)
         {
-            string it = items[_lobbySel];
-            if (it == "ESCOLHER MÚSICA")
+            if (_lobbySel < picks.Count)
             {
-                if (Net.Common.Count == 0) { Audio.PlaySfx(Sfx.Back); }
-                else { Audio.PlaySfx(Sfx.Select); _pickMode = true; _rows = null; _sel = -1; Go(Screen.Setlist); }
+                // listen to (or stop) this pick, only here
+                var (p, s) = picks[_lobbySel];
+                Audio.Stop(); _previewFor = null;
+                if (_listenKey == p.Pick) _listenKey = null;
+                else { _listenKey = p.Pick; PlayPreview(s, 0); }
+                Audio.PlaySfx(Sfx.Select);
             }
-            else if (it == "COMEÇAR!")
+            else
             {
-                if (song != null && allReady) { Audio.PlaySfx(Sfx.Select); Net.Send(new Msg { T = "start" }); }
-                else Audio.PlaySfx(Sfx.Back);
+                string it = items[_lobbySel - picks.Count];
+                if (it is "ESCOLHER MINHA MÚSICA" or "TROCAR MINHA MÚSICA")
+                {
+                    if (Net.Common.Count == 0) Audio.PlaySfx(Sfx.Back);
+                    else { Audio.PlaySfx(Sfx.Select); _listenKey = null; _pickMode = true; _rows = null; _sel = -1; Go(Screen.Setlist); }
+                }
+                else if (it == "TIRAR MINHA MÚSICA") { Audio.PlaySfx(Sfx.Back); Net.Send(new Msg { T = "unpick" }); }
+                else if (it == "SORTEAR E COMEÇAR!")
+                {
+                    if (picks.Count > 0 && allReady) { Audio.PlaySfx(Sfx.Select); Net.Send(new Msg { T = "start" }); }
+                    else Audio.PlaySfx(Sfx.Back);
+                }
+                else if (it == "SAIR DA SALA") leave = true;
+                else { Audio.PlaySfx(Sfx.Select); Net.Send(new Msg { T = "ready", Ready = me?.Ready != true }); }
             }
-            else if (it == "SAIR DA SALA") leave = true;
-            else { Audio.PlaySfx(Sfx.Select); Net.Send(new Msg { T = "ready", Ready = me?.Ready != true }); }
         }
         if (leave)
         {
             Audio.PlaySfx(Sfx.Back);
             Net.Leave(); Net.Error = null;
-            Audio.Stop(); _lobbyPreviewKey = null; _previewFor = null;
+            Audio.Stop(); _lobbyPreviewKey = null; _previewFor = null; _listenKey = null;
             Go(Screen.Online);
         }
     }
+
+    // ================================================================= the draw (roulette on the loading screen)
+    const double RollTime = 3.2;
+
+    /// <summary>Spins through the songs in the draw and stops on the one the room picked. True while spinning.</summary>
+    static bool DrawRoulette()
+    {
+        var cands = _rollCands.Distinct().ToList();
+        if (cands.Count < 2 || _song == null) return false;
+        double t = _screenT;
+        if (t > RollTime + 0.9) return false;
+        Paper.Backdrop(t);
+        int target = cands.IndexOf(_song); if (target < 0) target = 0;
+        double steps = target + cands.Count * 4;
+        double k = Math.Min(1, t / RollTime);
+        double pos = steps * (1 - Math.Pow(1 - k, 3));         // fast, then slows down
+        int idx = (int)Math.Floor(pos) % cands.Count;
+        if (idx != _rollLast) { _rollLast = idx; if (k < 1) Audio.PlaySfx(Sfx.Click, 0.5f); }
+        float frac = (float)(pos - Math.Floor(pos));
+        float cx = Gfx.W / 2f, cy = 290 * S, size = 230 * S, gap = 280 * S;
+        for (int d = -2; d <= 2; d++)
+        {
+            var s = cands[((idx + d) % cands.Count + cands.Count) % cands.Count];
+            float x = cx + (d - frac) * gap;
+            float sc = 1 - Math.Min(0.45f, Math.Abs(d - frac) * 0.25f);
+            Paper.Polaroid(s, new Vector2(x, cy), size * sc, d * 3, Math.Clamp(1.2f - Math.Abs(d - frac) * 0.45f, 0, 1));
+        }
+        Paper.Ribbon(new Vector2(cx, 62 * S), 360 * S, 60 * S, -1.5f, k < 1 ? "SORTEANDO..." : "SORTEADA!", true, false, t);
+        if (k >= 1)
+        {
+            Paper.Text(_song.Name, cx, 470 * S, 32, Paper.Ink, 0.5f);
+            Paper.Text(_song.Artist, cx, 512 * S, 21, Paper.Red, 0.5f);
+            var who = Net.Players.Where(p => p.Pick == Net.SongKey(_song)).Select(p => p.Name).ToList();
+            if (who.Count > 0) Paper.Text("escolhida por " + string.Join(", ", who), cx, 548 * S, 17, Paper.InkSoft, 0.5f, 0, Gfx.Body);
+            if (!_rollDing) { _rollDing = true; Audio.PlaySfx(Sfx.StarDeploy, 0.7f); }
+        }
+        return true;
+    }
+    static int _rollLast = -1; static bool _rollDing;
 
     // ================================================================= final ranking
     static void OnlineResultsScreen()

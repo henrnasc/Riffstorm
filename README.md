@@ -70,21 +70,24 @@ Se a ISO não for compatível, o jogo avisa em *Configurações > Discos* e não
 ## Multiplayer online (duelo de pontos)
 
 - Até **6 jogadores**, cada um no seu PC e na sua casa. Todos tocam a mesma música ao mesmo tempo; ganha quem fizer
-  mais pontos. Cada um escolhe a própria dificuldade.
-- Na tela: a sua pista no centro, as pistas dos outros ao fundo, e o placar de todos em cima (o seu em destaque).
+  mais pontos. Cada um escolhe a própria dificuldade. **Todos precisam estar na mesma versão do jogo.**
+- Na tela: a sua pista no centro, as pistas dos outros ao fundo, o placar de todos em cima (o seu em destaque) e uma
+  barra na direita mostrando quanto falta da música.
 
 1. Todos instalam o **Radmin VPN**, e um de vocês cria uma rede nele (*Rede > Criar rede*); os outros entram nela.
-2. No jogo: **Multiplayer Online** → digite seu nome → **Criar sala**. Aparece um **código** (ex.: `4F2-K9QA`).
-3. Os amigos digitam o código em **Entrar na sala**.
+2. No jogo: **Multiplayer Online** → digite seu nome → **Criar sala**.
+3. Os amigos abrem **Multiplayer Online** e a sala aparece sozinha em **Salas disponíveis** (ou digitam o código,
+   ex.: `4F2-K9QA`).
 4. Na 1ª vez, o Windows do anfitrião pergunta se o Riffstorm pode usar a rede: clique em **Permitir**
    (marque redes privadas **e** públicas — a rede do Radmin costuma aparecer como pública).
-5. O anfitrião escolhe a música (só aparecem as que **todos** da sala têm), todos marcam **Pronto** e ele aperta
-   **Começar**.
+5. **Sorteio de músicas:** cada jogador põe uma música no sorteio (só aparecem as que **todos** têm), pode
+   **ouvir** a dos outros (só no próprio PC, uma de cada vez) e **tirar** a sua se gostar mais de outra.
+   Quando todos marcam **Pronto**, o anfitrião aperta **Sortear e começar** e uma roleta escolhe a música.
+6. **Durante a música:** mande reações para os amigos (🔥 Fogo, 😂 Risada, 💀 Caveira, 👏 Palmas — teclas 1 a 4 ou
+   D-pad ←/→, L3, R3) e acompanhe os avisos automáticos ("Bruno: 100 notas seguidas!", "Carla foi vaiada!",
+   "Diego assumiu a liderança!").
 
-Porta usada pelo anfitrião: **TCP 47823**.
-
----
-
+Portas usadas pelo anfitrião: **TCP 47823** (jogo) e **UDP 47824** (para a sala aparecer na lista).
 ## Controles
 
 | | Controle (padrão) | Guitarra USB | Teclado |

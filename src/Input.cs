@@ -30,6 +30,8 @@ public static class Input
     /// <summary>Is each action (see <see cref="Act"/>) held right now.</summary>
     public static readonly bool[] ActDown = new bool[Binds.Count];
     static readonly bool[] _actPrev = new bool[Binds.Count];
+    /// <summary>The action's key/button went down this frame.</summary>
+    public static bool Hit(Act a) => ActDown[(int)a] && !_actPrev[(int)a];
     static float _lyPrev, _whPrev;
     static double _navRepeat; static int _navDir;
 

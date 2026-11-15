@@ -59,6 +59,7 @@ public sealed class NetPlayer
     public int Total { get; set; }
     public int Best { get; set; }
     public bool Failed { get; set; }
+    public string Pick { get; set; }           // song this player put in the draw ("game/id|hash")
 }
 
 static class Wire
@@ -90,18 +91,47 @@ public sealed class NetServer
     string _phase = "lobby", _song;
     volatile bool _running;
 
+    readonly string _roomId = Guid.NewGuid().ToString("N")[..12];
+    UdpClient _udp;
+
     public void Start()
     {
         _listener = new TcpListener(LoopbackOnly ? IPAddress.Loopback : IPAddress.Any, Net.Port);
         _listener.Start();
         _running = true;
         new Thread(AcceptLoop) { IsBackground = true, Name = "net-accept" }.Start();
+        try { _udp = Lan.OpenResponder(LoopbackOnly); new Thread(DiscoveryLoop) { IsBackground = true, Name = "net-discovery" }.Start(); } catch { }
+    }
+
+    /// <summary>Answers the "is there a room here?" probes of the "Salas disponíveis" list.</summary>
+    void DiscoveryLoop()
+    {
+        while (_running)
+        {
+            try
+            {
+                var ep = new IPEndPoint(IPAddress.Any, 0);
+                var data = _udp.Receive(ref ep);
+                if (Encoding.UTF8.GetString(data) != Lan.Probe) continue;
+                RoomInfo info;
+                lock (_lock)
+                    info = new RoomInfo
+                    {
+                        Id = _roomId, Ver = Net.Version, Phase = _phase, Players = Joined.Count(), Max = MaxPlayers,
+                        Host = Joined.FirstOrDefault(x => x.P.Host)?.P.Name ?? "?",
+                    };
+                var reply = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(info));
+                _udp.Send(reply, reply.Length, ep);
+            }
+            catch { if (!_running) break; }
+        }
     }
 
     public void Stop()
     {
         _running = false;
         try { _listener?.Stop(); } catch { }
+        try { _udp?.Close(); } catch { }
         lock (_lock) foreach (var c in _conns) try { c.Tcp.Close(); } catch { }
     }
 
@@ -155,6 +185,7 @@ public sealed class NetServer
     {
         var common = Common();
         if (_song != null && !common.Contains(_song)) _song = null;   // someone without that song joined
+        foreach (var x in Joined) if (x.P.Pick != null && !common.Contains(x.P.Pick)) x.P.Pick = null;
         Broadcast(new Msg { T = "lobby", Phase = _phase, Song = _song, Songs = common, Players = Joined.Select(x => x.P).ToList() });
     }
 
@@ -187,17 +218,31 @@ public sealed class NetServer
                 if (c.P == null) return;
                 c.P.Ready = m.Ready; BroadcastLobby();
                 break;
-            case "pick":
-                if (c.P?.Host != true || _phase != "lobby") return;
-                if (Common().Contains(m.Song)) { _song = m.Song; BroadcastLobby(); }
+            case "pick":                       // every player may put one song in the draw
+                if (c.P == null || _phase != "lobby") return;
+                if (Common().Contains(m.Song)) { c.P.Pick = m.Song; BroadcastLobby(); }
+                break;
+            case "unpick":
+                if (c.P == null || _phase != "lobby") return;
+                c.P.Pick = null; BroadcastLobby();
                 break;
             case "start":
-                if (c.P?.Host != true || _phase != "lobby" || _song == null) return;
+            {
+                if (c.P?.Host != true || _phase != "lobby") return;
                 if (Joined.Any(x => !x.P.Host && !x.P.Ready)) return;
+                var picks = Joined.Select(x => x.P.Pick).Where(s => s != null).ToList();
+                if (picks.Count == 0) return;
+                _song = picks[Random.Shared.Next(picks.Count)];          // the draw
                 _phase = "loading";
                 foreach (var x in Joined) { var p = x.P; p.Loaded = p.Done = p.Failed = false; p.Score = 0; p.Stars = p.Hit = p.Total = p.Best = 0; }
-                Broadcast(new Msg { T = "load", Song = _song });
+                Broadcast(new Msg { T = "load", Song = _song, Songs = picks });
                 BroadcastLobby();
+                break;
+            }
+            case "react":
+                if (c.P == null) return;
+                m.Id = c.P.Id; m.Diff = Math.Clamp(m.Diff, 0, 3);
+                Broadcast(m, c);
                 break;
             case "loaded":
                 if (c.P == null || _phase != "loading") return;
@@ -232,7 +277,7 @@ public sealed class NetServer
     {
         if (_phase != "play" || Joined.Any(x => !x.P.Done)) return;
         _phase = "lobby";
-        foreach (var x in Joined) x.P.Ready = false;
+        foreach (var x in Joined) { x.P.Ready = false; if (x.P.Pick == _song) x.P.Pick = null; }   // the song just played leaves the draw
     }
 
     void Remove(Conn c)
@@ -254,7 +299,7 @@ public sealed class NetServer
 public static class Net
 {
     public const int Port = 47823;
-    public const string Version = "riffstorm-net-1";
+    public const string Version = "riffstorm-net-2";
 
     static readonly Stopwatch Sw = Stopwatch.StartNew();
     public static double Clock => Sw.Elapsed.TotalSeconds;

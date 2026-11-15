@@ -20,13 +20,14 @@ TROCAR BOTÕES
 ESCOLHER MÚSICA
   Cada jogo tem sua lista. L1 / R1 (ou Q / E no teclado) troca de jogo.
 
-MULTIPLAYER ONLINE (duelo de pontos, até 6 jogadores)
+MULTIPLAYER ONLINE (duelo de pontos, até 6 jogadores - todos na mesma versão do jogo)
   1. Todos instalam o Radmin VPN (https://www.radmin-vpn.com) e entram na mesma rede.
-  2. Um jogador vai em Multiplayer Online > Criar sala e passa o código para os outros.
-  3. Os outros digitam o código em Entrar na sala.
+  2. Um jogador vai em Multiplayer Online > Criar sala.
+  3. Os outros abrem Multiplayer Online: a sala aparece em SALAS DISPONÍVEIS (ou digitam o código).
   4. Na 1ª vez o Windows pergunta se o Riffstorm pode usar a rede: clique em Permitir.
-  Só aparecem as músicas que todos da sala têm. Cada um escolhe a própria dificuldade.
-
+  5. Cada um põe uma música no sorteio, pode ouvir a dos outros e tirar a sua.
+     Todos marcam Pronto e o anfitrião aperta SORTEAR E COMEÇAR.
+  6. Durante a música: reações com as teclas 1 a 4 (controle: D-pad esq./dir., L3, R3).
 PALHETADA (Configurações > Palhetada)
   Automática (padrão): basta apertar o traste quando a nota chega na linha.
   Obrigatória: segure o traste E palhete (Enter / setas / D-pad).
