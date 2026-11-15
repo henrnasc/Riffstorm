@@ -1,0 +1,14 @@
+﻿bin/
+obj/
+jogo/
+dist/
+assets/covers/
+tools/covers/fetch_log*.txt
+*.pyc
+__pycache__/
+biblioteca/
+ISOs/
+!pacote/ISOs/
+*.iso
+*.zip
+*.png.bak

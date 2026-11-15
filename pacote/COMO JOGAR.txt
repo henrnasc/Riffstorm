@@ -1,0 +1,44 @@
+RIFFSTORM
+=========
+
+Abrir: dê dois cliques em Riffstorm.exe. Não precisa instalar nada.
+
+PRIMEIRA VEZ: coloque as ISOs compatíveis na pasta "ISOs" (ela está aqui do lado do Riffstorm.exe;
+veja ISOs\LEIA-ME.txt com os nomes e versões aceitas). O jogo confere cada ISO e importa as músicas
+sozinho, em segundo plano - dá para jogar enquanto isso. Veja em Configurações > Discos.
+As músicas ficam em %LOCALAPPDATA%\Riffstorm\biblioteca; depois disso a ISO não é mais necessária.
+As capas dos álbuns são baixadas automaticamente (Cover Art Archive) na primeira vez que aparecem.
+
+ESCOLHER MÚSICA
+  Cada jogo tem sua lista. L1 / R1 (ou Q / E no teclado) troca de jogo.
+
+MULTIPLAYER ONLINE (duelo de pontos, até 6 jogadores)
+  1. Todos instalam o Radmin VPN (https://www.radmin-vpn.com) e entram na mesma rede.
+  2. Um jogador vai em Multiplayer Online > Criar sala e passa o código para os outros.
+  3. Os outros digitam o código em Entrar na sala.
+  4. Na 1ª vez o Windows pergunta se o Riffstorm pode usar a rede: clique em Permitir.
+  Só aparecem as músicas que todos da sala têm. Cada um escolhe a própria dificuldade.
+
+PALHETADA (Configurações > Palhetada)
+  Automática (padrão): basta apertar o traste quando a nota chega na linha.
+  Obrigatória: segure o traste E palhete (Enter / setas / D-pad).
+
+CONTROLE (padrão - Configurações > Tipo de controle)
+  Trastes verde -> laranja : L2  L1  R1  R2  X     (Xbox: LT LB RB RT A)
+  Palhetada                : D-pad cima/baixo (ou analógico esquerdo)
+  Alavanca (whammy)        : analógico direito (mexa durante notas longas)
+  Modo Fúria               : Triângulo/Y ou Select
+  Pausa                    : Start
+
+GUITARRA (Configurações > Tipo de controle > Guitarra)
+  Trastes: A B Y X LB  -  Palhetada: barra  -  Alavanca: analógico direito
+  Modo Fúria: Select/Back ou inclinar a guitarra
+
+TECLADO
+  Trastes: A S D F G (ou F1-F5)  -  Palhetada: Enter / setas
+  Alavanca: segure K  -  Modo Fúria: Espaço  -  Pausa: Esc  -  Tela cheia: F11
+
+DICAS
+  - Se as notas parecerem fora do tempo: Configurações > Calibrar atraso de áudio.
+  - Notas com centro branco são hammer-ons (não precisa palhetar).
+  - Recordes ficam salvos em %APPDATA%\Riffstorm\save.json

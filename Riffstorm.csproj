@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>Riffstorm</AssemblyName>
+    <RootNamespace>Riffstorm</RootNamespace>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <DefaultItemExcludes>$(DefaultItemExcludes);jogo/**;tools/**;dist/**;pacote/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- album art is never shipped: the game downloads it (see Covers.cs); assets/covers is a local reviewing folder -->
+    <None Update="assets\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <None Update="assets\covers\**" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="NLayer" Version="3.0.1" />
+    <PackageReference Include="Raylib-cs" Version="8.1.0" />
+    <PackageReference Include="StbImageSharp" Version="2.27.14" />
+  </ItemGroup>
+</Project>

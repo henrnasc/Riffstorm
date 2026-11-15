@@ -1,0 +1,24 @@
+COLOQUE AQUI AS ISOs DOS SEUS DISCOS
+====================================
+
+Pode ser direto nesta pasta ou em subpastas (uma por disco). Com o jogo aberto ou fechado:
+na próxima vez que ele rodar, cada ISO é conferida e as músicas são importadas sozinhas.
+
+O jogo só aceita estas versões exatas (conferidas pela impressão digital SHA-1):
+
+  Guitar Hero (USA).iso                              PS2   2.300.313.600 bytes
+    SHA-1 4caacaea582c79605f8c3582dd4b90abdec699f5
+
+  Guitar Hero II (USA).iso                           PS2   4.646.305.792 bytes
+    SHA-1 e1a3a81827aa4264984b4f3678de58ca3d881528
+
+  Guitar Hero Encore - Rocks the 80s (USA).iso       PS2   1.901.821.952 bytes
+    SHA-1 184f2dc9993d9b1e6edf0125f68e1ce07742567a
+
+  Guitar Hero III - Legends of Rock (USA).iso        PS3   6.318.391.296 bytes
+    SHA-1 a1fe34e1895aab21e7da0dca62bb49edd1f6dffa
+
+O nome do arquivo não importa, só o conteúdo. Depois de importado, a ISO pode ser apagada:
+as músicas ficam em %LOCALAPPDATA%\Riffstorm\biblioteca.
+
+Use cópias (dumps) dos seus próprios discos originais.
