@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Raylib_cs;
 
 namespace Riffstorm;
@@ -24,27 +24,37 @@ public static partial class Game
         var kb = Cfg.KeyBinds; var pb = Cfg.PadBinds;
 
         // ---------------------------------------------------------- input
-        if (_capAct >= 0) CaptureStep(kb, pb);
+        if (Environment.GetEnvironmentVariable("RIFF_KEYLOG") is string kl)
+            foreach (var key in AllKeys) if (Raylib.IsKeyPressed(key)) File.AppendAllText(kl, $"{Raylib.GetTime():0.00} tecla {key} conf={Input.Confirm} cap={_capAct} row={_cRow} col={_cCol}\n");
+        if (_conf is { } cf) ConflictStep(kb, pb, cf);
+        else if (_restoreAsk) RestoreStep();
+        else if (_capAct >= 0) CaptureStep(kb, pb);
         else
         {
             if (Input.Up) { _cRow = (_cRow + CRows - 1) % CRows; Audio.PlaySfx(Sfx.Click); }
             if (Input.Down) { _cRow = (_cRow + 1) % CRows; Audio.PlaySfx(Sfx.Click); }
             if (Input.Left) { _cCol = Math.Max(0, Math.Min(_cCol, RowCols(_cRow) - 1) - 1); Audio.PlaySfx(Sfx.Click); }
             if (Input.Right) { _cCol = Math.Min(RowCols(_cRow) - 1, _cCol + 1); Audio.PlaySfx(Sfx.Click); }
+            // mouse: hovering selects a cell, clicking activates it
+            bool click = false;
+            var mp = Raylib.GetMousePosition();
+            foreach (var (r, c, rect) in _cellRects)
+                if (Raylib.CheckCollisionPointRec(mp, rect))
+                {
+                    if (Raylib.GetMouseDelta() != Vector2.Zero || Raylib.IsMouseButtonPressed(MouseButton.Left)) { _cRow = r; _cCol = c; }
+                    if (Raylib.IsMouseButtonPressed(MouseButton.Left)) click = true;
+                }
             int col = Math.Min(_cCol, RowCols(_cRow) - 1);
             var (act, isPad) = CellAt(_cRow, col);
-            if (Input.Confirm)
+            bool restoreKey = Raylib.IsKeyPressed(KeyboardKey.F2);
+            if (restoreKey) act = -1;
+            if (Input.Confirm || click || restoreKey)
             {
                 Audio.PlaySfx(Sfx.Select);
-                if (act < 0)
-                {
-                    Cfg.KeyBinds = Binds.DefaultKeys(); Cfg.PadBinds = Binds.DefaultPad(Cfg.Controller); Cfg.Save();
-                    Note("Botões padrão restaurados.");
-                }
+                if (act < 0) _restoreAsk = true;
                 else
                 {
                     _capAct = act; _capPad = isPad; _capAt = Raylib.GetTime();
-                    while (Raylib.GetKeyPressed() != 0) { }
                     if (isPad) Binds.BeginPadCapture(Input.Pad);
                 }
             }
@@ -55,7 +65,7 @@ public static partial class Game
             }
             else if (Input.Back) { Audio.PlaySfx(Sfx.Back); Cfg.Save(); Go(Screen.Settings); return; }
         }
-
+        _cellRects.Clear();
         // ---------------------------------------------------------- draw
         Paper.Backdrop(t);
         Paper.Ribbon(new Vector2(200 * S, 56 * S), 300 * S, 58 * S, -2.5f, "CONTROLES", true, false, t);
@@ -117,32 +127,60 @@ public static partial class Game
         }
         {
             float y = card.Y + 34 * S + 7 * rowH;
-            var c = new Vector2(card.X + card.Width / 2, y + rowH / 2);
-            Paper.Text("Restaurar botões padrão", c.X, y + 3 * S, 19, _cRow == 9 ? Paper.Red : Paper.InkSoft, 0.5f);
-            if (_cRow == 9 && _capAct < 0) Paper.RedBox(new Rectangle(c.X - 150 * S, y - 2 * S, 300 * S, rowH), t, 2.4f);
+            var c = new Vector2(card.X + card.Width / 2, y + rowH / 2 + 2 * S);
+            bool on = _cRow == 9;
+            Paper.Ribbon(c, 290 * S, rowH + 4 * S, -1, "RESTAURAR PADRÃO (F2)", true, on, t, 0.9f);
+            _cellRects.Add((9, 0, new Rectangle(c.X - 170 * S, c.Y - rowH / 2 - 4 * S, 340 * S, rowH + 8 * S)));
+            if (on && _capAct < 0) Paper.RedBox(new Rectangle(c.X - 180 * S, c.Y - rowH / 2 - 6 * S, 360 * S, rowH + 12 * S), t, 2.4f);
         }
 
-        // prompt while waiting for the new key/button
+        // dialogs: waiting for the new key/button, key already in use, restore defaults
         if (_capAct >= 0)
         {
             string what = _capPad ? "Aperte o botão no CONTROLE" : "Aperte a TECLA";
             if (_capPad && _capAct == (int)Act.Whammy) what = "Mexa a alavanca / analógico no CONTROLE";
             if (_capPad && Input.Pad < 0) what = "Nenhum controle conectado";
-            var r = new Rectangle(cx - 330 * S, 150 * S, 660 * S, 96 * S);
-            Paper.Card(r, -1, true, false, new Color(250, 238, 160, 255));
-            Paper.Text($"{Binds.Names[_capAct]}: {what}", cx, r.Y + 20 * S, 24, Paper.Red, 0.5f, -1);
-            Paper.Text("Esc cancela", cx, r.Y + 58 * S, 16, Paper.InkSoft, 0.5f, -1, Gfx.Body);
+            Dialog($"{Binds.Names[_capAct]}: {what}", "Esc cancela", t);
         }
-        if (_cNote != null && Raylib.GetTime() - _cNoteAt < 3)
-            Paper.Text(_cNote, cx, Gfx.H - 58 * S, 17, Paper.Teal, 0.5f, 0, Gfx.Bold);
+        else if (_conf is { } cd)
+        {
+            string name = cd.pad ? Binds.PadName(cd.code) : Binds.KeyName(cd.key);
+            Dialog($"\"{name}\" já é usado em \"{Binds.Names[cd.other]}\".",
+                   $"Enter = usar em \"{Binds.Names[cd.act]}\" mesmo assim (\"{Binds.Names[cd.other]}\" fica sem)      Esc = cancelar", t);
+        }
+        else if (_restoreAsk)
+            Dialog("Voltar todos os botões para o padrão?", "Enter = sim      Esc = não", t);
 
-        Paper.Hints((Paper.Blue, "Mudar botão"), (Paper.YellowGem, "Delete: apagar"), (Paper.RedGem, "Voltar"));
+        if (_cNote != null && Raylib.GetTime() - _cNoteAt < 3)
+            Paper.Text(_cNote, cx, card.Y - 22 * S, 17, Paper.Red, 0.5f, 0, Gfx.Bold);
+
+        Paper.Hints((Paper.Blue, "Mudar (Enter / clique)"), (Paper.YellowGem, "Delete: apagar"), (Paper.RedGem, "Voltar"));
+    }
+
+    static readonly List<(int row, int col, Rectangle r)> _cellRects = new();
+    static (int act, bool pad, int key, string code, int other)? _conf;
+    static bool _restoreAsk;
+    static double _dlgAt;
+
+    static readonly KeyboardKey[] AllKeys = Enum.GetValues<KeyboardKey>()
+        .Where(k => k is not (KeyboardKey.Null or KeyboardKey.Escape or KeyboardKey.Back or KeyboardKey.Menu or KeyboardKey.VolumeUp or KeyboardKey.VolumeDown)).ToArray();
+
+    static void Dialog(string line1, string line2, double t)
+    {
+        float cx = Gfx.W / 2f;
+        float w = Math.Max(Raylib.MeasureTextEx(Gfx.Hand, line1, 24 * S, 0).X, Raylib.MeasureTextEx(Gfx.Body, line2, 16 * S, 0).X) + 80 * S;
+        var r = new Rectangle(cx - w / 2, 140 * S, w, 104 * S);
+        Raylib.DrawRectangle(0, 0, Gfx.W, Gfx.H, new Color(0, 0, 0, 90));
+        Paper.Card(r, -1, true, false, new Color(250, 238, 160, 255));
+        Paper.Text(line1, cx, r.Y + 22 * S, 24, Paper.Red, 0.5f, -1);
+        Paper.Text(line2, cx, r.Y + 64 * S, 16, Paper.Ink, 0.5f, -1, Gfx.Body);
     }
 
     static void Note(string s) { _cNote = s; _cNoteAt = Raylib.GetTime(); }
 
     static void Cell(Rectangle r, int act, bool pad, int row, int col, double t, Color? tint)
     {
+        _cellRects.Add((row, col, r));
         bool sel = _cRow == row && Math.Min(_cCol, RowCols(row) - 1) == col;
         bool cap = _capAct == act && _capPad == pad;
         string txt = cap ? "..." : pad ? Binds.PadName(Cfg.PadBinds[act]) : Binds.KeyName(Cfg.KeyBinds[act]);
@@ -158,36 +196,64 @@ public static partial class Game
     static void CaptureStep(int[] kb, string[] pb)
     {
         if (Raylib.GetTime() - _capAt < 0.15) return;
-        if (Raylib.IsKeyPressed(KeyboardKey.Escape) || Raylib.GetTime() - _capAt > 10) { _capAct = -1; Audio.PlaySfx(Sfx.Back); return; }
+        if (Raylib.IsKeyPressed(KeyboardKey.Escape) || Raylib.GetTime() - _capAt > 15) { _capAct = -1; Audio.PlaySfx(Sfx.Back); return; }
         if (!_capPad)
         {
-            int k;
-            while ((k = Raylib.GetKeyPressed()) != 0)
+            // scan every key (the per-frame key queue is already read by the input system)
+            foreach (var key in AllKeys)
             {
-                if (k == (int)KeyboardKey.Escape) continue;
-                for (int a = 0; a < Binds.Count; a++)
-                    if (a != _capAct && kb[a] == k && SameGroup(a, _capAct)) { kb[a] = 0; Note($"\"{Binds.KeyName(k)}\" saiu de {Binds.Names[a]}."); }
-                kb[_capAct] = k;
-                Finish();
+                if (!Raylib.IsKeyPressed(key)) continue;
+                Assign(kb, pb, false, (int)key, null);
                 return;
             }
         }
         else
         {
             string code = Binds.CapturePad(Input.Pad, _capAct == (int)Act.Whammy);
-            if (code == null) return;
-            for (int a = 0; a < Binds.Count; a++)
-                if (a != _capAct && pb[a] == code && SameGroup(a, _capAct)) { pb[a] = ""; Note($"\"{Binds.PadName(code)}\" saiu de {Binds.Names[a]}."); }
-            pb[_capAct] = code;
-            Finish();
+            if (code != null) Assign(kb, pb, true, 0, code);
         }
     }
 
-    // gameplay actions and list navigation may share a button (e.g. L1 is a fret and "previous game")
-    static bool SameGroup(int a, int b) => (a >= (int)Act.PrevGame) == (b >= (int)Act.PrevGame);
-
-    static void Finish()
+    /// <summary>Sets the new binding, or asks first when another action already uses it.</summary>
+    static void Assign(int[] kb, string[] pb, bool pad, int key, string code)
     {
-        _capAct = -1; Cfg.Save(); Audio.PlaySfx(Sfx.Select);
+        int act = _capAct; _capAct = -1;
+        for (int a = 0; a < Binds.Count; a++)
+        {
+            if (a == act) continue;
+            if (pad ? pb[a] == code : kb[a] == key)
+            {
+                _conf = (act, pad, key, code, a); _dlgAt = Raylib.GetTime();
+                Audio.PlaySfx(Sfx.Click);
+                return;
+            }
+        }
+        if (pad) pb[act] = code; else kb[act] = key;
+        Cfg.Save(); Audio.PlaySfx(Sfx.Select);
+    }
+
+    static void ConflictStep(int[] kb, string[] pb, (int act, bool pad, int key, string code, int other) c)
+    {
+        if (Raylib.GetTime() - _dlgAt < 0.15) return;
+        if (Raylib.IsKeyPressed(KeyboardKey.Enter) || Raylib.IsKeyPressed(KeyboardKey.KpEnter) || Raylib.IsMouseButtonPressed(MouseButton.Left)
+            || (Input.Pad >= 0 && Raylib.IsGamepadButtonPressed(Input.Pad, GamepadButton.RightFaceDown)))
+        {
+            if (c.pad) { pb[c.other] = ""; pb[c.act] = c.code; } else { kb[c.other] = 0; kb[c.act] = c.key; }
+            Cfg.Save(); Audio.PlaySfx(Sfx.Select);
+            Note($"\"{Binds.Names[c.other]}\" ficou sem {(c.pad ? "botão" : "tecla")}.");
+            _conf = null;
+        }
+        else if (Input.Cancel || Raylib.IsMouseButtonPressed(MouseButton.Right)) { _conf = null; Audio.PlaySfx(Sfx.Back); }
+    }
+
+    static void RestoreStep()
+    {
+        if (Input.Confirm || Raylib.IsMouseButtonPressed(MouseButton.Left))
+        {
+            Cfg.KeyBinds = Binds.DefaultKeys(); Cfg.PadBinds = Binds.DefaultPad(Cfg.Controller); Cfg.Save();
+            Audio.PlaySfx(Sfx.Select); Note("Botões padrão restaurados.");
+            _restoreAsk = false;
+        }
+        else if (Input.Cancel || Raylib.IsMouseButtonPressed(MouseButton.Right)) { _restoreAsk = false; Audio.PlaySfx(Sfx.Back); }
     }
 }
