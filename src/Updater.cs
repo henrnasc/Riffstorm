@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
 
@@ -82,6 +82,8 @@ public static class Updater
         return new Version(v.Major, v.Minor, Math.Max(0, v.Build));
     }
 
+    static string _staging, _work;
+
     public static void InstallAsync()
     {
         if (State != St.Available || _url == null) return;
@@ -90,7 +92,6 @@ public static class Updater
         Task.Run(() =>
         {
             string work = Path.Combine(Path.GetTempPath(), "riffstorm-update");
-            bool renamed = false;
             try
             {
                 if (Directory.Exists(work)) Directory.Delete(work, true);
@@ -111,34 +112,42 @@ public static class Updater
                 ZipFile.ExtractToDirectory(zip, x);
                 string from = Directory.Exists(Path.Combine(x, "Riffstorm")) ? Path.Combine(x, "Riffstorm") : x;
                 if (!File.Exists(Path.Combine(from, "Riffstorm.exe"))) throw new InvalidDataException("pacote sem Riffstorm.exe");
-
-                string dest = AppContext.BaseDirectory;
-                if (File.Exists(OldExe)) File.Delete(OldExe);
-                File.Move(ExePath, OldExe);            // allowed while running
-                renamed = true;
-                foreach (var file in Directory.GetFiles(from, "*", SearchOption.AllDirectories))
-                {
-                    string rel = Path.GetRelativePath(from, file);
-                    string target = Path.Combine(dest, rel);
-                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    File.Copy(file, target, true);
-                }
-                try { Directory.Delete(work, true); } catch { }
+                _staging = from; _work = work;
                 State = St.Ready;
             }
             catch (Exception e)
             {
-                if (renamed && !File.Exists(ExePath)) try { File.Move(OldExe, ExePath); } catch { }
                 Error = "Falha ao atualizar: " + (e.InnerException ?? e).Message;
                 State = St.Error;
             }
         });
     }
 
-    /// <summary>Starts the freshly installed exe (the caller then closes this one).</summary>
-    public static void Restart()
+    /// <summary>
+    /// The running exe can't replace itself, so a tiny hidden script waits for the game to close, copies the new files
+    /// over the game folder and starts the new version. The caller closes the game right after.
+    /// </summary>
+    public static bool Restart()
     {
-        try { Process.Start(new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "Riffstorm.exe")) { UseShellExecute = true, WorkingDirectory = AppContext.BaseDirectory }); }
-        catch { }
+        if (_staging == null) return false;
+        try
+        {
+        string dest = AppContext.BaseDirectory.TrimEnd('\\', '/');
+        int pid = Environment.ProcessId;
+        string script = Path.Combine(_work, "atualizar.cmd");
+        string cmd =
+            "@echo off\r\nchcp 65001 >nul\r\nset LOG=\"%TEMP%\\riffstorm-update.log\"\r\necho inicio %date% %time% > %LOG%\r\n" +
+            ":wait\r\n" +
+            $"tasklist /FI \"PID eq {pid}\" | find \"{pid}\" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)\r\n" +
+            "echo jogo fechado >> %LOG%\r\nping -n 3 127.0.0.1 >nul\r\n" +
+            $"robocopy \"{_staging}\" \"{dest}\" /E /IS /IT /R:20 /W:1 /NFL /NDL /NJH /NJS >> %LOG% 2>&1\r\n" +
+            "echo robocopy %errorlevel% >> %LOG%\r\n" +
+            $"start \"\" /D \"{dest}\" \"{dest}\\Riffstorm.exe\"\r\n" +
+            $"cd /d \"%TEMP%\"\r\nrmdir /s /q \"{_work}\"\r\n";
+        File.WriteAllText(script, cmd, new System.Text.UTF8Encoding(false));
+        Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"\"{script}\"\"") { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
+        return true;
+        }
+        catch (Exception e) { Error = "Falha ao reiniciar: " + e.Message; State = St.Error; return false; }
     }
 }

@@ -163,7 +163,7 @@ public static partial class Game
     {
         if (!_updateChecked) { _updateChecked = true; Updater.CheckAsync(); }
         var st = Updater.State;
-        if (st == Updater.St.Ready) { Updater.Restart(); _quit = true; return; }
+        if (st == Updater.St.Ready) { if (Updater.Restart()) { _quit = true; return; } st = Updater.State; }
         string ver = "v" + Updater.CurrentText;
         string txt = st switch
         {
