@@ -208,7 +208,14 @@ public sealed partial class Highway
 
     public Highway() => HwAssets.Init();
 
-    float LaneX(int lane) => ((Lefty ? 4 - lane : lane) - 2) * LaneW;
+    // battle effects (set by the game every frame)
+    public bool Mirror;                    // lanes flipped
+    public int[] ColorPerm;                // gem colours shuffled (null = normal)
+    public float HideNear;                 // notes vanish this close to the strike line
+    public float Sway;                     // 0..1 drunk-highway strength
+    public readonly List<(int lane, double time)> Fakes = new();   // decoy notes
+
+    float LaneX(int lane) => (((Lefty ^ Mirror) ? 4 - lane : lane) - 2) * LaneW;
     float Z(double noteTime, double t) => -(float)(noteTime - t) * Speed;
     static Color LaneCol(int l, bool star) => star ? Gfx.StarBlue : Gfx.Fret[l];
 
@@ -229,6 +236,12 @@ public sealed partial class Highway
         float dt = (float)renderDt;
         _whSmooth += (Whammy - _whSmooth) * Math.Min(1, dt * 12);
         _cam = new Camera3D(new Vector3(0, 4.25f, 5.0f), new Vector3(0, 0, -5.0f), Vector3.UnitY, 44, CameraProjection.Perspective);
+        if (Sway > 0)
+        {
+            float sx = MathF.Sin((float)t * 2.3f) * 1.1f * Sway, roll = MathF.Sin((float)t * 1.7f + 1) * 0.22f * Sway;
+            _cam.Position += new Vector3(sx, MathF.Sin((float)t * 3.1f) * 0.35f * Sway, 0);
+            _cam.Up = Vector3.Normalize(new Vector3(MathF.Sin(roll), MathF.Cos(roll), 0));
+        }
         for (int l = 0; l < 5; l++)
         {
             _laneFlash[l] = Math.Max(0, _laneFlash[l] - dt * 4);
@@ -415,14 +428,41 @@ public sealed partial class Highway
             if (n.Hit) continue;
             float z = Z(n.Time, t);
             if (z < -Far || z > 1.6f) continue;
+            if (HideNear > 0 && z > -HideNear && !n.Missed) continue;          // battle: "Sumiço"
             for (int l = 0; l < 5; l++)
-                if ((n.Mask & (1 << l)) != 0) DrawNote(new Vector3(LaneX(l), 0.0f, z), l, n.Hopo, n.Star, star, n.Missed);
+                if ((n.Mask & (1 << l)) != 0) DrawNote(new Vector3(LaneX(l), 0.0f, z), l, n.Hopo, n.Star, star, n.Missed, ColorPerm);
+            if (n.Box && !n.Missed)
+            {
+                // battle item box: a spinning rainbow cube floating over the note
+                int l0 = System.Numerics.BitOperations.TrailingZeroCount(n.Mask);
+                float spin = (float)t * 3 + i;
+                var hue = Raylib.ColorFromHSV((float)(t * 120 % 360), 0.95f, 0.85f);
+                var pos = new Vector3(LaneX(l0), 0.42f + 0.05f * MathF.Sin(spin * 2), z + 0.13f);
+                var rot = R3.M(Raymath.MatrixRotateY(spin), Raymath.MatrixRotateX(0.5f), R3.T(pos));
+                R3.Draw(HwAssets.Bar, R3.M(R3.T(0, -0.5f, 0.5f), R3.S(0.26f), rot), hue, 0.35f, 24, 0.15f, 0.5f);
+                // dark edges so it reads as a box, not a blob of light
+                var edge = new Color(20, 10, 30, 255);
+                foreach (var (ex, ey) in new[] { (1, 1), (1, -1), (-1, 1), (-1, -1) })
+                {
+                    R3.Draw(HwAssets.Bar, R3.M(R3.T(0, -0.5f, 0.5f), R3.S(0.03f, 0.03f, 0.275f), R3.T(ex * 0.13f, ey * 0.13f, 0), rot), edge, 0.1f, 8, 0, 0);
+                    R3.Draw(HwAssets.Bar, R3.M(R3.T(0, -0.5f, 0.5f), R3.S(0.275f, 0.03f, 0.03f), R3.T(0, ex * 0.13f, ey * 0.13f), rot), edge, 0.1f, 8, 0, 0);
+                    R3.Draw(HwAssets.Bar, R3.M(R3.T(0, -0.5f, 0.5f), R3.S(0.03f, 0.275f, 0.03f), R3.T(ex * 0.13f, 0, ey * 0.13f), rot), edge, 0.1f, 8, 0, 0);
+                }
+            }
+        }
+        foreach (var (lane, time) in Fakes)
+        {
+            float z = Z(time, t);
+            if (z < -Far || z > 0.4f) continue;
+            if (HideNear > 0 && z > -HideNear) continue;
+            DrawNote(new Vector3(LaneX(lane), 0.0f, z), lane, false, false, star, false, ColorPerm, 0.55f);
         }
     }
 
-    static void DrawNote(Vector3 p, int lane, bool hopo, bool starNote, bool starMode, bool missed)
+    static void DrawNote(Vector3 p, int lane, bool hopo, bool starNote, bool starMode, bool missed, int[] perm = null, float alpha = 1)
     {
-        var col = starMode ? Gfx.StarBlue : starNote ? new Color(235, 245, 255, 255) : Gfx.Fret[lane];
+        var col = starMode ? Gfx.StarBlue : starNote ? new Color(235, 245, 255, 255) : Gfx.Fret[perm != null ? perm[lane] : lane];
+        if (alpha < 1) col = Gfx.A(col, alpha);
         if (missed) col = Gfx.Lerp(col, new Color(55, 55, 58, 255), 0.7f);
         float sc = hopo ? 0.88f : 1f;
         var xf = R3.M(R3.S(sc), R3.T(p));

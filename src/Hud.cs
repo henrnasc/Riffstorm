@@ -31,7 +31,7 @@ public sealed partial class Highway
         }
         // streak bulbs
         int bm = p.BaseMultiplier;
-        int lit = bm >= 4 ? 10 : p.Streak % 10;
+        int lit = bm >= 4 ? 10 : (int)(p.Streak % p.StreakStep * 10 / p.StreakStep);
         for (int i = 0; i < 10; i++)
         {
             var c = new Vector2(px + 26 * s + i * 19.5f * s, py + 82 * s);

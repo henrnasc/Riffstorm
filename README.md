@@ -94,6 +94,23 @@ Se a ISO não for compatível, o jogo avisa em *Configurações > Discos* e não
    D-pad ←/→, L3, R3) e acompanhe os avisos automáticos ("Bruno: 100 notas seguidas!", "Carla foi vaiada!",
    "Diego assumiu a liderança!").
 
+**Pontuação igual em qualquer dificuldade:** no online, Fácil, Médio, Difícil e Expert valem o mesmo — quem toca
+perfeito no Fácil faz a mesma pontuação de quem toca perfeito no Expert (as notas e a sequência para subir o
+multiplicador são ajustadas). Ganha quem errar menos, não quem escolher a dificuldade maior. No modo solo nada muda.
+
+### Modo Batalha (estilo kart)
+
+O anfitrião troca o modo da sala em **MODO: DUELO / MODO: BATALHA**. Na Batalha aparecem **caixas coloridas girando**
+em cima de algumas notas (nos mesmos momentos para todos). Acerte a nota para pegar a caixa: uma roleta sorteia um
+item, que fica guardado no quadro à esquerda até você apertar **Usar item** (teclado **H**, controle **Quadrado / X**,
+guitarra **RB** — dá para trocar em *Configurações > Controles*). Quem está atrás no placar ganha itens mais fortes.
+
+- **Ataques** (vão no jogador logo acima de você; se você lidera, no 2º): Pista invertida, Turbo, Neblina, Sumiço
+  (notas somem perto da linha), Corda arrebentada (um traste trava até ser apertado 5 vezes), Cores trocadas, Pista
+  bêbada, Apagão, Notas fantasmas, Ladrão de energia, Multiplicador travado e **Raio no líder** (sempre no 1º).
+- **Ajudas**: Escudo (bloqueia o próximo ataque), Espelho (devolve o próximo ataque), Pontos em dobro, Sequência
+  protegida (o próximo erro não conta), Torcida (enche o público) e Ímã (rouba pontos de quem está logo acima de você).
+
 Portas usadas pelo anfitrião: **TCP 47823** (jogo) e **UDP 47824** (para a sala aparecer na lista).
 ## Controles
 
@@ -105,6 +122,8 @@ Portas usadas pelo anfitrião: **TCP 47823** (jogo) e **UDP 47824** (para a sala
 | Modo Fúria | △ / Y / Select | Select ou inclinar | Espaço |
 | Trocar de jogo na lista | L1 / R1 | L1 / R1 | Q / E |
 | Pausa | Start | Start | Esc |
+| Reações (online) | D-pad ←/→, L3, R3 | D-pad ←/→ | 1 2 3 4 |
+| Usar item (Batalha) | Quadrado / X | RB | H |
 
 Todos os botões podem ser trocados em **Configurações > Controles**: tem o desenho da pista com o botão de cada traste embaixo e a lista das outras ações (palhetada, Modo Fúria, alavanca, pausa...). Cada um escolhe uma tecla e um botão do controle.
 

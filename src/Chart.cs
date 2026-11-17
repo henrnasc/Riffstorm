@@ -11,6 +11,7 @@ public sealed class Note
     public int Phrase = -1;          // star phrase index
     // runtime state
     public bool Hit, Missed, Holding, Released;
+    public bool Box, BoxTaken;       // battle mode: item box on this note
     public double HeldUntil;
     public int Count => System.Numerics.BitOperations.PopCount((uint)Mask);
     public bool Sustain => EndTime > Time;

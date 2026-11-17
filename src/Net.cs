@@ -42,6 +42,10 @@ public sealed class Msg
     public int Hit { get; set; }
     public int Total { get; set; }
     public int Best { get; set; }
+    // battle mode
+    public string Mode { get; set; }           // "duelo" | "batalha"
+    public int To { get; set; }                // target player of an item
+    public int Amount { get; set; }            // item seed / points stolen
 }
 
 public sealed class NetPlayer
@@ -89,7 +93,7 @@ public sealed class NetServer
     readonly List<Conn> _conns = new();
     readonly object _lock = new();
     int _nextId = 1;
-    string _phase = "lobby", _song;
+    string _phase = "lobby", _song, _mode = "duelo";
     volatile bool _running;
 
     readonly string _roomId = Guid.NewGuid().ToString("N")[..12];
@@ -187,7 +191,7 @@ public sealed class NetServer
         var common = Common();
         if (_song != null && !common.Contains(_song)) _song = null;   // someone without that song joined
         foreach (var x in Joined) if (x.P.Pick != null && !common.Contains(x.P.Pick)) x.P.Pick = null;
-        Broadcast(new Msg { T = "lobby", Phase = _phase, Song = _song, Songs = common, Players = Joined.Select(x => x.P).ToList() });
+        Broadcast(new Msg { T = "lobby", Phase = _phase, Song = _song, Songs = common, Mode = _mode, Players = Joined.Select(x => x.P).ToList() });
     }
 
     void Handle(Conn c, Msg m)
@@ -236,10 +240,20 @@ public sealed class NetServer
                 _song = picks[Random.Shared.Next(picks.Count)];          // the draw
                 _phase = "loading";
                 foreach (var x in Joined) { var p = x.P; p.Loaded = p.Done = p.Failed = false; p.InMatch = true; p.Score = 0; p.Stars = p.Hit = p.Total = p.Best = 0; }
-                Broadcast(new Msg { T = "load", Song = _song, Songs = picks });
+                Broadcast(new Msg { T = "load", Song = _song, Songs = picks, Mode = _mode, Amount = Random.Shared.Next(1, int.MaxValue) });
                 BroadcastLobby();
                 break;
             }
+            case "mode":                       // host: points duel or battle with items
+                if (c.P?.Host != true || _phase is not ("lobby" or "results")) return;
+                _mode = m.Mode == "batalha" ? "batalha" : "duelo"; BroadcastLobby();
+                break;
+            case "atk":                        // battle: an item used on someone (everyone sees it in the feed)
+            case "gift":                       // battle: points stolen by a magnet, handed to the thief
+                if (c.P == null || _phase != "play") return;
+                m.Id = c.P.Id;
+                Broadcast(m, c);
+                break;
             case "react":
                 if (c.P == null) return;
                 m.Id = c.P.Id; m.Diff = Math.Clamp(m.Diff, 0, 3);
@@ -312,7 +326,7 @@ public sealed class NetServer
 public static class Net
 {
     public const int Port = 47823;
-    public const string Version = "riffstorm-net-3";
+    public const string Version = "riffstorm-net-4";
     public const string BusyRoomText = "Uma partida está em andamento nessa sala. Você poderá entrar quando todos voltarem para a escolha de músicas.";
 
     static readonly Stopwatch Sw = Stopwatch.StartNew();
@@ -331,6 +345,7 @@ public static class Net
     public static string RoomCode, RoomIp, RoomVia;
     public static string Error;                 // why we left the room (shown in the online menu)
     public static string Phase = "lobby";
+    public static string Mode = "duelo";
     public static string Song;                  // chosen song key "game/id|hash"
     public static List<NetPlayer> Players = new();
     public static HashSet<string> Common = new();
@@ -491,7 +506,7 @@ public static class Net
             {
                 case "welcome": MyId = m.Id; break;
                 case "lobby":
-                    Phase = m.Phase ?? "lobby"; Song = m.Song;
+                    Phase = m.Phase ?? "lobby"; Song = m.Song; Mode = m.Mode ?? "duelo";
                     Players = m.Players ?? new(); Common = new HashSet<string>(m.Songs ?? new());
                     break;
                 case "pong":

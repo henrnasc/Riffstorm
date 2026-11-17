@@ -40,6 +40,9 @@ public static partial class Game
                 case "--no-iso": _noIso = true; break;
                 case "--autoupdate": _autoUpdate = true; break;
                 case "--autoreact": _autoReact = true; break;
+                case "--battle": _autoBattle = true; break;
+                case "--autoitem": _autoItem = true; break;
+                case "--fx": _testFx = int.Parse(args[++i]); break;
                 case "--loopback": NetServer.LoopbackOnly = true; break;
                 case "--shot": _shotScreen = args[++i]; _shotAt = double.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture); _shotFile = args[++i]; break;
             }
@@ -355,6 +358,21 @@ public static partial class Game
         _player = new Player(chart, _playDiff) { PlayOnWhenFailed = _online };
         Highway.Surface = Highways.Current(Cfg);
         _hw = new Highway { Speed = 7.5f * Cfg.NoteSpeed * (_playDiff >= 2 ? 1.15f : 1f), Lefty = Cfg.Lefty };
+        _hwBaseSpeed = _hw.Speed;
+        if (_online)
+        {
+            // every difficulty can reach the same score: points scaled to the hardest chart of the song
+            int top = Enumerable.Range(0, 4).Reverse().FirstOrDefault(d => chart.Notes[d].Count > 0);
+            int myCount = chart.Notes[_playDiff].Count, topCount = chart.Notes[top].Count;
+            double step = topCount > 0 ? Math.Clamp(10.0 * myCount / topCount, 1, 10) : 10;
+            _player.StreakStep = step;
+            double mine = Player.MaxBase(chart, _playDiff, step), best = Player.MaxBase(chart, top);
+            _player.ScoreScale = mine > 0 ? best / mine : 1;
+            if (top != _playDiff) _player.NoteScale = Player.TimeScales(chart, _playDiff, top, step);
+        }
+        _battle = _online && _battleMode;
+        ResetBattle();
+        if (_battle) PlaceBoxes(_player, _battleSeed);
         _paused = _ended = _failedShown = false; _pauseSel = 0;
         _lastStreakCall = 0; _announceAt = -10;
         _botPlayer = _bot ? new Bot() : null;
@@ -397,6 +415,7 @@ public static partial class Game
         if (!_paused && !_ended)
         {
             if (_botPlayer != null) _botPlayer.Drive(p, t);
+            if (_battle) BattleInput(p);
             bool fretChange = false;
             for (int i = 0; i < 5; i++) fretChange |= Input.FretPressed[i] || Input.FretReleased[i];
             int held = Player.Held();
@@ -404,6 +423,7 @@ public static partial class Game
             for (int i = 0; i < 5; i++) anyPress |= Input.FretPressed[i];
             float wh = Input.WhammyActive ? Input.Whammy : 0;
             p.Update(t, gdt, Input.Strum, fretChange, held, wh, Input.StarPower, Cfg.NoFail || _bot, Cfg.AutoStrum && !_bot, anyPress);
+            if (_battle) BattleUpdate(p);
             Audio.WhammyTarget = p.HoldingAny ? wh : 0;
             _hw.Whammy = p.HoldingAny ? wh : 0;
             _hw.EnergyFilling = p.WhammyFilling;
@@ -446,6 +466,7 @@ public static partial class Game
         var view = new Rectangle(0, 0, Gfx.W, Gfx.H);
         _hw.Draw(p, t, dt, view, p.StarActive);
         Highway.DrawHud(p, view, t);
+        if (_battle) { DrawBattleOverlays(t); DrawItemHud(t); }
         if (_online)
         {
             DrawScoreboard();

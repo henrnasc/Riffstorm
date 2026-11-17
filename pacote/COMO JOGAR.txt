@@ -28,6 +28,18 @@ MULTIPLAYER ONLINE (duelo de pontos, até 6 jogadores - todos na mesma versão d
   5. Cada um põe uma música no sorteio, pode ouvir a dos outros e tirar a sua.
      Todos marcam Pronto e o anfitrião aperta SORTEAR E COMEÇAR.
   6. Durante a música: reações com as teclas 1 a 4 (controle: D-pad esq./dir., L3, R3).
+  PONTOS IGUAIS: no online todas as dificuldades valem o mesmo. Tocar perfeito no Fácil
+     dá a mesma pontuação que tocar perfeito no Expert. (No solo nada muda.)
+
+MODO BATALHA (online - o anfitrião troca em MODO: DUELO / MODO: BATALHA na sala)
+  Caixas coloridas girando aparecem em cima de algumas notas. Acerte a nota para pegar a caixa:
+  uma roleta sorteia um item. Use com H (controle: Quadrado/X - guitarra: RB).
+  Quem está atrás no placar ganha itens mais fortes.
+  Ataques (no jogador logo acima de você): pista invertida, turbo, neblina, sumiço, corda
+     arrebentada (aperte o traste 5 vezes para consertar), cores trocadas, pista bêbada, apagão,
+     notas fantasmas, ladrão de energia, multiplicador travado e raio no líder.
+  Ajudas: escudo, espelho (devolve o ataque), pontos em dobro, sequência protegida, torcida
+     e ímã (rouba pontos de quem está logo acima de você).
 PALHETADA (Configurações > Palhetada)
   Automática (padrão): basta apertar o traste quando a nota chega na linha.
   Obrigatória: segure o traste E palhete (Enter / setas / D-pad).

@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using Raylib_cs;
 
 namespace Riffstorm;
@@ -211,6 +211,7 @@ public static partial class Game
                     if (s == null || me == null) { Net.Send(new Msg { T = "done", Failed = true }); Go(Screen.OnlineResults); break; }
                     _previewFor = null; _listenKey = null;
                     _rollCands = (m.Songs ?? new()).Select(Net.FindSong).Where(x => x != null).ToList();
+                    _battleMode = m.Mode == "batalha"; _battleSeed = m.Amount;
                     _rollLast = -1; _rollDing = false;
                     StartSong(s, Math.Clamp(me.Diff, 0, 3));
                     break;
@@ -218,6 +219,8 @@ public static partial class Game
                 case "go": _goAt = Net.ToLocal(m.Time); break;
                 case "st": ApplyGhost(m); break;
                 case "react": if (_screen == Screen.Play) AddReaction(m.Id, m.Diff); break;
+                case "atk": if (_battle) OnAttack(m); break;
+                case "gift": if (_battle) OnGift(m); break;
             }
         }
     }
@@ -533,7 +536,9 @@ public static partial class Game
 
         bool mine = me?.Pick != null;
         bool allReady = Net.Players.Count > 0 && Net.Players.All(p => p.Host || p.Ready);
+        bool battleRoom = Net.Mode == "batalha";
         var items = new List<string> { mine ? "TROCAR MINHA MÚSICA" : "ESCOLHER MINHA MÚSICA" };
+        if (host) items.Add(battleRoom ? "MODO: BATALHA" : "MODO: DUELO");
         if (mine) items.Add("TIRAR MINHA MÚSICA");
         items.Add(host ? "SORTEAR E COMEÇAR!" : me?.Ready == true ? "NÃO ESTOU PRONTO" : "ESTOU PRONTO!");
         items.Add("SAIR DA SALA");
@@ -571,6 +576,7 @@ public static partial class Game
 
         // difficulty (each player picks their own)
         int diff = Math.Clamp(me?.Diff ?? Cfg.LastDifficulty, 0, 3);
+        Paper.Text(battleRoom ? "Modo BATALHA: caixas de item na pista para atrapalhar os amigos" : "Modo DUELO: só pontos, sem itens", colX, 400 * S, 15, battleRoom ? Paper.Red : Paper.Teal, 0, 0, Gfx.Bold);
         float dy = 438 * S, dw = colW / 4;
         for (int d = 0; d < 4; d++)
         {
@@ -583,22 +589,23 @@ public static partial class Game
         // menu
         for (int i = 0; i < items.Count; i++)
         {
-            var c = new Vector2(cx, 492 * S + i * 44 * S);
+            var c = new Vector2(cx, 486 * S + i * 39 * S);
             bool enabled = !(items[i] == "SORTEAR E COMEÇAR!" && (picks.Count == 0 || !allReady || Net.Phase != "lobby"));
             bool sel = _lobbySel == picks.Count + i;
-            Paper.Ribbon(c, 320 * S, 36 * S, i % 2 == 0 ? -1.2f : 1.2f, items[i], enabled, sel, t + i, 0.95f);
-            if (sel) Paper.RedBox(new Rectangle(c.X - 185 * S, c.Y - 22 * S, 370 * S, 44 * S), t);
+            Paper.Ribbon(c, 320 * S, 32 * S, i % 2 == 0 ? -1.2f : 1.2f, items[i], enabled, sel, t + i, 0.95f);
+            if (sel) Paper.RedBox(new Rectangle(c.X - 185 * S, c.Y - 19 * S, 370 * S, 38 * S), t);
         }
         int inResults = Net.Players.Count(p => p.InMatch);
-        if (Net.Phase == "results" && inResults > 0) Paper.Text($"Esperando {inResults} jogador(es) saírem da tela de resultado", cx, 492 * S + items.Count * 44 * S - 16 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
-        else if (host && picks.Count > 0 && !allReady) Paper.Text("Esperando todos ficarem PRONTOS", cx, 492 * S + items.Count * 44 * S - 16 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
-        else if (host && picks.Count == 0) Paper.Text("Alguém precisa escolher uma música", cx, 492 * S + items.Count * 44 * S - 16 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
+        if (Net.Phase == "results" && inResults > 0) Paper.Text($"Esperando {inResults} jogador(es) saírem da tela de resultado", cx, 486 * S + items.Count * 39 * S - 6 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
+        else if (host && picks.Count > 0 && !allReady) Paper.Text("Esperando todos ficarem PRONTOS", cx, 486 * S + items.Count * 39 * S - 6 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
+        else if (host && picks.Count == 0) Paper.Text("Alguém precisa escolher uma música", cx, 486 * S + items.Count * 39 * S - 6 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
         if (Net.Error != null) Paper.Text(Net.Error, cx, Gfx.H - 96 * S, 15, Paper.Red, 0.5f, 0, Gfx.Body);
 
         Paper.Hints((Paper.Blue, "Confirmar / ouvir"), (Paper.YellowGem, "< > Dificuldade"), (Paper.RedGem, "Sair da sala"));
 
         // ---- automation (tests)
         if (_autoReady && me != null && !me.Host && !me.Ready && _screenT > 0.5) Net.Send(new Msg { T = "ready", Ready = true });
+        if (_autoBattle && host && !battleRoom && _screenT > 0.3) Net.Send(new Msg { T = "mode", Mode = "batalha" });
         if (_autoPick != null && me != null && me.Pick == null && _screenT > 0.5 && Raylib.GetTime() - _autoStartedAt > 1)
         {
             var aps = SongDb.Songs.FirstOrDefault(s => s.Key == _autoPick || s.Id == _autoPick);
@@ -636,6 +643,7 @@ public static partial class Game
                     else { Audio.PlaySfx(Sfx.Select); _listenKey = null; _pickMode = true; _rows = null; _sel = -1; Go(Screen.Setlist); }
                 }
                 else if (it == "TIRAR MINHA MÚSICA") { Audio.PlaySfx(Sfx.Back); Net.Send(new Msg { T = "unpick" }); }
+                else if (it.StartsWith("MODO:")) { Audio.PlaySfx(Sfx.Select); Net.Send(new Msg { T = "mode", Mode = battleRoom ? "duelo" : "batalha" }); }
                 else if (it == "SORTEAR E COMEÇAR!")
                 {
                     if (picks.Count > 0 && allReady) { Audio.PlaySfx(Sfx.Select); Net.Send(new Msg { T = "start" }); }
