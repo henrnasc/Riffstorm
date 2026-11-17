@@ -121,8 +121,10 @@ public static partial class Game
 
     static void ApplyVolumes()
     {
-        Audio.MusicVolume = Cfg.MusicVol;
-        Audio.SfxVolume = Cfg.SfxVol;
+        // RIFFSTORM_MUTE=1: automated test runs start silent
+        bool mute = Environment.GetEnvironmentVariable("RIFFSTORM_MUTE") == "1";
+        Audio.MusicVolume = mute ? 0 : Cfg.MusicVol;
+        Audio.SfxVolume = mute ? 0 : Cfg.SfxVol;
     }
 
     // ================================================================= title

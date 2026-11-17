@@ -37,8 +37,15 @@ public static class IsoWatcher
 
     public static string ResolveFolder(Settings cfg)
     {
+        // the "ISOs" folder that ships next to Riffstorm.exe always wins (the game may have been moved or downloaded again)
+        var own = System.IO.Path.Combine(AppContext.BaseDirectory, "ISOs");
+        if (Directory.Exists(own))
+        {
+            if (!string.Equals(cfg.IsoFolder, own, StringComparison.OrdinalIgnoreCase)) { cfg.IsoFolder = own; cfg.Save(); }
+            return own;
+        }
         if (!string.IsNullOrEmpty(cfg.IsoFolder) && Directory.Exists(cfg.IsoFolder)) return cfg.IsoFolder;
-        // an "ISOs" folder next to the game or in one of its parent folders
+        // an "ISOs" folder in one of the parent folders
         var d = new DirectoryInfo(AppContext.BaseDirectory);
         for (int up = 0; d != null && up < 7; up++, d = d.Parent)
         {
