@@ -433,6 +433,7 @@ public static partial class Game
         {
             var rm = rooms[_onSel - 2];
             if (rm.Ver != Net.Version) { _onStatus = "Essa sala é de outra versão do Riffstorm. Atualizem o jogo (botão na tela inicial)."; Audio.PlaySfx(Sfx.Back); return; }
+            if (rm.Phase != "lobby") { _onStatus = Net.BusyRoomText; Audio.PlaySfx(Sfx.Back); return; }
             Audio.PlaySfx(Sfx.Select);
             _onStatus = $"Entrando na sala de {rm.Host}...";
             var rip = rm.Ip;
@@ -583,12 +584,14 @@ public static partial class Game
         for (int i = 0; i < items.Count; i++)
         {
             var c = new Vector2(cx, 492 * S + i * 44 * S);
-            bool enabled = !(items[i] == "SORTEAR E COMEÇAR!" && (picks.Count == 0 || !allReady));
+            bool enabled = !(items[i] == "SORTEAR E COMEÇAR!" && (picks.Count == 0 || !allReady || Net.Phase != "lobby"));
             bool sel = _lobbySel == picks.Count + i;
             Paper.Ribbon(c, 320 * S, 36 * S, i % 2 == 0 ? -1.2f : 1.2f, items[i], enabled, sel, t + i, 0.95f);
             if (sel) Paper.RedBox(new Rectangle(c.X - 185 * S, c.Y - 22 * S, 370 * S, 44 * S), t);
         }
-        if (host && picks.Count > 0 && !allReady) Paper.Text("Esperando todos ficarem PRONTOS", cx, 492 * S + items.Count * 44 * S - 16 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
+        int inResults = Net.Players.Count(p => p.InMatch);
+        if (Net.Phase == "results" && inResults > 0) Paper.Text($"Esperando {inResults} jogador(es) saírem da tela de resultado", cx, 492 * S + items.Count * 44 * S - 16 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
+        else if (host && picks.Count > 0 && !allReady) Paper.Text("Esperando todos ficarem PRONTOS", cx, 492 * S + items.Count * 44 * S - 16 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
         else if (host && picks.Count == 0) Paper.Text("Alguém precisa escolher uma música", cx, 492 * S + items.Count * 44 * S - 16 * S, 14, Paper.Red, 0.5f, 0, Gfx.Body);
         if (Net.Error != null) Paper.Text(Net.Error, cx, Gfx.H - 96 * S, 15, Paper.Red, 0.5f, 0, Gfx.Body);
 
@@ -695,10 +698,11 @@ public static partial class Game
     {
         double t = _screenT;
         Paper.Backdrop(t);
-        bool allDone = Net.Players.All(p => p.Done) && Net.Phase == "lobby";
+        // the server switches to "results" once everyone who played has finished (nobody can join meanwhile)
+        bool allDone = Net.Phase is "results" or "lobby";
         Paper.Ribbon(new Vector2(Gfx.W / 2f, 58 * S), 470 * S, 62 * S, -1.5f, allDone ? "RESULTADO DO DUELO" : "AGUARDANDO OS OUTROS...", true, false, t, 0.95f);
 
-        var list = Net.Players.Select(p => (p, score: LiveScore(p))).OrderByDescending(x => x.score).ToList();
+        var list = Net.Players.Where(p => p.InMatch || p.Done).Select(p => (p, score: LiveScore(p))).OrderByDescending(x => x.score).ToList();
         var card = new Rectangle(90 * S, 120 * S, Gfx.W - 180 * S, Gfx.H - 196 * S);
         Paper.Card(card, 0.4f, true, true);
         float rowH = Math.Min(80 * S, (card.Height - 70 * S) / Math.Max(1, list.Count));
@@ -732,7 +736,8 @@ public static partial class Game
         if (allDone)
         {
             Paper.Hints((Paper.Blue, "Voltar para a sala"), (Paper.RedGem, "Sair da sala"));
-            if (Input.Confirm) { Audio.PlaySfx(Sfx.Select); FinishOnlineMatch(); Go(Screen.Lobby); }
+            bool autoBack = (_autoReady || _autoStart > 0) && _screenT > 6;      // tests only
+            if (Input.Confirm || autoBack) { Audio.PlaySfx(Sfx.Select); Net.Send(new Msg { T = "back" }); FinishOnlineMatch(); Go(Screen.Lobby); }
             else if (Input.Back) { Audio.PlaySfx(Sfx.Back); FinishOnlineMatch(); Net.Leave(); Go(Screen.Online); }
         }
         else Paper.Hints((Paper.RedGem, "Esperando o fim da música dos outros"));

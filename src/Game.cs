@@ -350,7 +350,7 @@ public static partial class Game
     static void BeginPlay(short[][] pcm, Chart chart)
     {
         _pcm = pcm; _chart = chart;
-        _player = new Player(chart, _playDiff);
+        _player = new Player(chart, _playDiff) { PlayOnWhenFailed = _online };
         Highway.Surface = Highways.Current(Cfg);
         _hw = new Highway { Speed = 7.5f * Cfg.NoteSpeed * (_playDiff >= 2 ? 1.15f : 1f), Lefty = Cfg.Lefty };
         _paused = _ended = _failedShown = false; _pauseSel = 0;
@@ -421,8 +421,9 @@ public static partial class Game
 
             if (p.Failed && !_failedShown)
             {
-                _failedShown = true; _ended = true; _endAt = _screenT + 3.5;
-                Audio.FadeOut(); Audio.PlaySfx(Sfx.Fail, 0.9f);
+                _failedShown = true;
+                Audio.PlaySfx(Sfx.Fail, 0.9f);
+                if (!_online) { _ended = true; _endAt = _screenT + 3.5; Audio.FadeOut(); }
             }
             double songEnd = Math.Max(p.Chart.LastNoteTime + 1.5, Math.Min(Audio.Length, p.Chart.LastNoteTime + 12));
             if (!_ended && t > songEnd)
@@ -489,7 +490,15 @@ public static partial class Game
             float sc = 1 + (float)Math.Max(0, 0.2 - ad) * 2;
             Gfx.Fancy(Gfx.Title, _announce, Gfx.W / 2f, Gfx.H * 0.22f, 54 * sc, Gfx.Bright(_announceCol, 1.3f), Gfx.Bright(_announceCol, 0.6f), 0.5f, 4, null, a);
         }
-        if (p.Failed)
+        if (p.Failed && _online)
+        {
+            // online: keep playing to the end with the others, but no more points
+            Raylib.DrawRectangleGradientV(0, 0, Gfx.W, Gfx.H / 3, new Color(90, 0, 0, 90), new Color(60, 0, 0, 0));
+            var bc = new Vector2(Gfx.W / 2f, (_online ? 104 : 30) * Gfx.S);
+            Gfx.Fancy(Gfx.Title, "VAIADO!", bc.X, bc.Y, 40, new Color(255, 200, 180, 255), new Color(200, 20, 10, 255), 0.5f, 3);
+            Gfx.Shadowed(Gfx.Bold, "Continue tocando com a galera - você não marca mais pontos", bc.X, bc.Y + 46 * Gfx.S, 17, new Color(255, 225, 210, 230), 0.5f);
+        }
+        else if (p.Failed)
         {
             Raylib.DrawRectangle(0, 0, Gfx.W, Gfx.H, new Color(60, 0, 0, 120));
             Gfx.Fancy(Gfx.Title, "VOCÊ FOI VAIADO!", Gfx.W / 2f, Gfx.H * 0.35f, 80, new Color(255, 200, 180, 255), new Color(200, 20, 10, 255), 0.5f, 5);

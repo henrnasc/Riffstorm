@@ -60,6 +60,7 @@ public sealed class NetPlayer
     public int Best { get; set; }
     public bool Failed { get; set; }
     public string Pick { get; set; }           // song this player put in the draw ("game/id|hash")
+    public bool InMatch { get; set; }          // played the current song and has not left the results screen yet
 }
 
 static class Wire
@@ -195,7 +196,7 @@ public sealed class NetServer
         {
             case "hello":
                 if (m.Ver != Net.Version) { Send(c, new Msg { T = "error", Text = "Versão do Riffstorm diferente da do anfitrião." }); c.Tcp.Close(); return; }
-                if (_phase != "lobby") { Send(c, new Msg { T = "error", Text = "A partida já começou. Tente de novo quando voltarem para a sala." }); c.Tcp.Close(); return; }
+                if (_phase != "lobby") { Send(c, new Msg { T = "error", Text = Net.BusyRoomText }); c.Tcp.Close(); return; }
                 if (Joined.Count() >= MaxPlayers) { Send(c, new Msg { T = "error", Text = "A sala está cheia (6 jogadores)." }); c.Tcp.Close(); return; }
                 string name = string.IsNullOrWhiteSpace(m.Name) ? "Jogador" : m.Name.Trim();
                 if (name.Length > 16) name = name[..16];
@@ -219,11 +220,11 @@ public sealed class NetServer
                 c.P.Ready = m.Ready; BroadcastLobby();
                 break;
             case "pick":                       // every player may put one song in the draw
-                if (c.P == null || _phase != "lobby") return;
+                if (c.P == null || _phase is not ("lobby" or "results")) return;
                 if (Common().Contains(m.Song)) { c.P.Pick = m.Song; BroadcastLobby(); }
                 break;
             case "unpick":
-                if (c.P == null || _phase != "lobby") return;
+                if (c.P == null || _phase is not ("lobby" or "results")) return;
                 c.P.Pick = null; BroadcastLobby();
                 break;
             case "start":
@@ -234,7 +235,7 @@ public sealed class NetServer
                 if (picks.Count == 0) return;
                 _song = picks[Random.Shared.Next(picks.Count)];          // the draw
                 _phase = "loading";
-                foreach (var x in Joined) { var p = x.P; p.Loaded = p.Done = p.Failed = false; p.Score = 0; p.Stars = p.Hit = p.Total = p.Best = 0; }
+                foreach (var x in Joined) { var p = x.P; p.Loaded = p.Done = p.Failed = false; p.InMatch = true; p.Score = 0; p.Stars = p.Hit = p.Total = p.Best = 0; }
                 Broadcast(new Msg { T = "load", Song = _song, Songs = picks });
                 BroadcastLobby();
                 break;
@@ -253,6 +254,12 @@ public sealed class NetServer
                 if (c.P == null || _phase != "play") return;
                 m.Id = c.P.Id; c.P.Score = m.Score;
                 Broadcast(m, c);
+                break;
+            case "back":                       // left the results screen, back at the song selection
+                if (c.P == null) return;
+                c.P.InMatch = false;
+                CheckBackToLobby();
+                BroadcastLobby();
                 break;
             case "done":
                 if (c.P == null || (_phase != "play" && _phase != "loading")) return;
@@ -276,7 +283,7 @@ public sealed class NetServer
     void CheckAllDone()
     {
         if (_phase != "play" || Joined.Any(x => !x.P.Done)) return;
-        _phase = "lobby";
+        _phase = "results";                    // nobody can join until everyone is back at the song selection
         foreach (var x in Joined) { x.P.Ready = false; if (x.P.Pick == _song) x.P.Pick = null; }   // the song just played leaves the draw
     }
 
@@ -288,7 +295,13 @@ public sealed class NetServer
         if (c.P?.Host == true) { var next = Joined.FirstOrDefault(); if (next != null) next.P.Host = false; }  // host leaving closes the room anyway
         CheckAllLoaded();
         CheckAllDone();
+        CheckBackToLobby();
         BroadcastLobby();
+    }
+
+    void CheckBackToLobby()
+    {
+        if (_phase == "results" && !Joined.Any(x => x.P.InMatch)) _phase = "lobby";
     }
 }
 
@@ -299,7 +312,8 @@ public sealed class NetServer
 public static class Net
 {
     public const int Port = 47823;
-    public const string Version = "riffstorm-net-2";
+    public const string Version = "riffstorm-net-3";
+    public const string BusyRoomText = "Uma partida está em andamento nessa sala. Você poderá entrar quando todos voltarem para a escolha de músicas.";
 
     static readonly Stopwatch Sw = Stopwatch.StartNew();
     public static double Clock => Sw.Elapsed.TotalSeconds;

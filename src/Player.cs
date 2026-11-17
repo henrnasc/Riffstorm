@@ -1,4 +1,4 @@
-namespace Riffstorm;
+﻿namespace Riffstorm;
 
 /// <summary>
 /// Gameplay rules. Numbers come from the disc's own config (config/gen/scoring.dtb and beatmatch.dtb):
@@ -24,6 +24,8 @@ public sealed class Player
     public float Energy;               // star power 0..1
     public bool StarActive;
     public bool Failed;
+    /// <summary>Online: a booed player keeps playing the notes until the song ends, but scores nothing more.</summary>
+    public bool PlayOnWhenFailed;
     public int Next;                   // first note index not yet resolved
     public double LastHopoHit = -9, LastStrumHit = -9;
     public Note LastHit;
@@ -83,7 +85,7 @@ public sealed class Player
     {
         JustMissed = JustReadyStar = JustDeployed = JustPhraseGot = false;
         WhammyFilling = false;
-        if (Failed) return;
+        if (Failed && !PlayOnWhenFailed) return;
 
         // 1) notes that scrolled past the window are misses
         while (Next < Notes.Count && Notes[Next].Time + Window < t)
@@ -160,8 +162,8 @@ public sealed class Player
             {
                 double beats = (end - n.HeldUntil) / Chart.BeatLengthAt(n.Time);
                 double pts = TailPoints * n.Count * beats;
-                BaseScore += pts; ScoreAdd(pts * Multiplier);
-                if (n.Star && whammy > 0.08f && !StarActive)
+                if (!Failed) { BaseScore += pts; ScoreAdd(pts * Multiplier); }
+                if (n.Star && whammy > 0.08f && !StarActive && !Failed)
                 {
                     bool wasReady = Energy >= 0.5f;
                     Energy = Math.Min(1, Energy + (float)(0.034 * beats * 2.5));
@@ -174,14 +176,15 @@ public sealed class Player
         }
 
         // 5) star power
-        if (starBtn && !StarActive && Energy >= 0.5f) { StarActive = true; JustDeployed = true; }
+        if (starBtn && !StarActive && Energy >= 0.5f && !Failed) { StarActive = true; JustDeployed = true; }
         if (StarActive)
         {
             Energy -= (float)(dt * 0.125 / (4 * Chart.BeatLengthAt(t)));
             if (Energy <= 0) { Energy = 0; StarActive = false; }
         }
 
-        if (!noFail && Meter <= 0.0f) Failed = true;
+        if (!noFail && Meter <= 0.0f && !Failed) { Failed = true; StarActive = false; Energy = 0; }
+        if (Failed) Meter = 0;
     }
 
     IEnumerable<Note> ActiveSustains()
@@ -196,15 +199,19 @@ public sealed class Player
     void HitNote(Note n, double t)
     {
         n.Hit = true;
-        Streak++; BestStreak = Math.Max(BestStreak, Streak); NotesHit++;
-        BaseScore += HeadPoints * n.Count;
-        ScoreAdd(HeadPoints * n.Count * Multiplier);
+        Streak++;
+        if (!Failed)
+        {
+            BestStreak = Math.Max(BestStreak, Streak); NotesHit++;
+            BaseScore += HeadPoints * n.Count;
+            ScoreAdd(HeadPoints * n.Count * Multiplier);
+        }
         Meter = Math.Min(1, Meter + _noteWeight * (StarActive ? 1.5f : 1));
         LastHit = n;
         if (n.Sustain) { n.Holding = true; n.HeldUntil = n.Time; }
         for (int l = 0; l < 5; l++) if ((n.Mask & (1 << l)) != 0) HitFx.Add((l, t, n.Star || StarActive));
         Audio.GuitarOn = true;
-        if (n.Star && n.Phrase >= 0 && !_phraseBroken[n.Phrase] && IsLastOfPhrase(n))
+        if (!Failed && n.Star && n.Phrase >= 0 && !_phraseBroken[n.Phrase] && IsLastOfPhrase(n))
         {
             bool wasReady = Energy >= 0.5f;
             Energy = Math.Min(1, Energy + 0.25f);
